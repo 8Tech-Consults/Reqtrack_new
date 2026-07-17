@@ -1,0 +1,19 @@
+{
+  "name": "pwd",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "dependencies": {
+    "framer-motion": "^12.38.0",
+    "xlsx": "^0.18.5"
+  }
+}

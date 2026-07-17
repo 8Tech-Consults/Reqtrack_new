@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Certified Seed Tag - Fixed Layout</title>
+    <style>
+      body {
+        background: #1565c0;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        margin: 0;
+        font-family: "Courier New", Courier, monospace;
+      }
+
+      .tag {
+        width: 1270px;
+        height: 560px;
+        background: #f5f0e1;
+        background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect width="100" height="100" fill="%23f5f0e1"/><path d="M0,0 Q50,20 100,0 L100,100 L0,100 Z" fill="%23e8e0d5" opacity="0.3"/></svg>');
+        background-size: 100px 100px;
+        padding: 30px 50px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        position: relative;
+        border-radius: 8px;
+      }
+
+      @font-face {
+        font-family: "DotMatrix";
+        src: url("https://cdn.jsdelivr.net/gh/danhongtang/dot-matrix-font@master/OCR-A.ttf");
+      }
+      .dotmatrix {
+        font-family: "DotMatrix", "Courier New", Courier, monospace;
+        letter-spacing: 1.5px;
+        line-height: 1.35;
+        font-weight: bold;
+      }
+
+      .header {
+        font-size: 48px;
+        text-align: center;
+        letter-spacing: 4px;
+        margin-bottom: 5px;
+      }
+
+      .tag-number {
+        position: absolute;
+        top: 48px;
+        right: 250px;
+        font-size: 28px;
+      }
+
+      .main-grid {
+        display: grid;
+        grid-template-columns: 1fr 330px 140px;
+        margin-top: 20px;
+        column-gap: 30px;
+      }
+
+      .left-col {
+        font-size: 30px;
+      }
+
+      .row {
+        display: flex;
+        margin: 10px 0;
+      }
+
+      .label {
+        width: 370px;
+      }
+
+      .value {
+        font-weight: normal;
+      }
+
+      .right-col {
+        font-size: 28px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        margin-top: 4px;
+      }
+
+      .right-item span:first-child {
+        font-weight: bold;
+      }
+
+      .right-item span:nth-child(2) {
+        font-weight: normal;
+      }
+
+      /* QR CODE STYLE */
+      .qrcode {
+        position: absolute;
+        right: 70px;
+        top: 160px;
+        width: 120px;
+        height: 120px;
+      }
+
+      .bottom {
+        position: absolute;
+        bottom: 40px;
+        width: 100%;
+        left: 0;
+        text-align: center;
+        font-size: 38px;
+        letter-spacing: 3px;
+        transform: translateY(10px);
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="tag">
+      <div class="dotmatrix">
+        <div class="header">CERTIFIED SEED</div>
+        <div class="tag-number">00664384</div>
+
+        <div class="main-grid">
+          <!-- LEFT COLUMN -->
+          <div class="left-col">
+            <div class="row">
+              <div class="label">CROP:</div>
+              <div class="value">Sorghum</div>
+            </div>
+            <div class="row">
+              <div class="label">VARIETY:</div>
+              <div class="value">Seso 3</div>
+            </div>
+            <div class="row">
+              <div class="label">LOT No.:</div>
+              <div class="value">ESL/003/S3/21B-S32</div>
+            </div>
+            <div class="row">
+              <div class="label">INSPECTION No.:</div>
+              <div class="value">1127</div>
+            </div>
+            <div class="row">
+              <div class="label">CERT DATE:</div>
+              <div class="value">2/2/2022</div>
+            </div>
+            <div class="row">
+              <div class="label">COMPANY:</div>
+              <div class="value">Equator seeds</div>
+            </div>
+            <div class="row">
+              <div class="label">PHYSICAL ADDRESS:</div>
+              <div class="value">GULU</div>
+            </div>
+          </div>
+
+          <!-- RIGHT COLUMN -->
+          <div class="right-col">
+            <div class="right-item">
+              <span>SEASON:</span> <span>2022A</span>
+            </div>
+            <div class="right-item">
+              <span>EXPIRY:</span> <span>2 Seasons</span>
+            </div>
+            <div class="right-item"><span>GERM%:</span> <span>91</span></div>
+            <div class="right-item"><span>PURITY%:</span> <span>99</span></div>
+            <div class="right-item">
+              <span>WEIGHT:</span> <span>50 Kgs</span>
+            </div>
+            <div class="right-item">
+              <img
+                src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=ESL/003/S3/21B-S32"
+                width="150"
+                height="150"
+              />
+            </div>
+          </div>
+        </div>
+
+        <!-- QR CODE -->
+        <!-- <div class="qrcode">
+          <img
+            src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=ESL/003/S3/21B-S32"
+            width="150"
+            height="150"
+          />
+        </div> -->
+
+        <div class="bottom">TREATED SEED, NOT FOR HUMAN CONSUMPTION</div>
+      </div>
+    </div>
+  </body>
+</html>
