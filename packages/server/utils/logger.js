@@ -11,7 +11,7 @@ const write = (level, event, details = {}) => {
     timestamp: new Date().toISOString(),
     level,
     event,
-    app: "pwd-observatory-server",
+    app: "reqtrack-server",
     app_version: process.env.APP_VERSION || process.env.npm_package_version || "unknown",
     ...details,
   };

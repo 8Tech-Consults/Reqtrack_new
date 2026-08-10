@@ -2,22 +2,7 @@ import { Kind, parse } from "graphql";
 
 const PUBLIC_ROOT_FIELDS = Object.freeze({
   query: new Set([
-    "publicPwdCount",
-    "landingPageStats",
-    "counsellingCentres",
-    "counsellingCentre",
-    "disabilities",
-    "districts",
-    "innovations",
-    "innovation",
-    "jobs",
-    "job",
-    "newsItems",
-    "newsFeed",
-    "newsItem",
-    "postCategories",
-    "events",
-    "event",
+    "IntrospectionQuery",
     "products",
     "product",
     "serviceProviders",

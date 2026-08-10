@@ -239,9 +239,9 @@ const DropdownUser = ({ menuItemRef }: IDropdownUserProps) => {
         </div>
 
         <div className="menu-item px-4 py-1.5">
-          <a onClick={logout} className="btn btn-sm btn-light justify-center">
+          <button type="button" onClick={logout} className="btn btn-sm btn-light justify-center w-full">
             <FormattedMessage id="USER.MENU.LOGOUT" />
-          </a>
+          </button>
         </div>
       </div>
     );

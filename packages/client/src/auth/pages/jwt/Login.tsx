@@ -37,8 +37,8 @@ const Login = () => {
   const { currentLayout } = useLayout();
   const rememberedEmail = useMemo(() => localStorage.getItem('email') || '', []);
 
-  useEffect(() => {
-    if (auth) {
+  useEffect(() => { 
+    if (auth) { 
       navigate(from, { replace: true });
     }
   }, [auth, from, navigate]);
@@ -102,11 +102,11 @@ const Login = () => {
               Log in to Your Account
             </h3>
             <p className="text-sm text-slate-500">
-              Welcome back! Choose your preferred sign-in method.
+              Welcome back! 
             </p>
           </div>
 
-          <div className="flex items-center justify-between text-sm text-slate-500">
+          {/* <div className="flex items-center justify-between text-sm text-slate-500">
             <span>New here?</span>
             <Link
               to={currentLayout?.name === 'auth-branded' ? '/auth/signup' : '/auth/classic/signup'}
@@ -114,10 +114,10 @@ const Login = () => {
             >
               Sign up
             </Link>
-          </div>
+          </div> */}
         </div>
 
-        <div className="grid grid-cols-5 gap-2.5">
+        {/* <div className="grid grid-cols-5 gap-2.5">
           <a href="#" className="flex h-10 items-center justify-center rounded-full border border-slate-200 bg-white text-xs font-semibold text-slate-700 shadow-sm hover:border-blue-200 hover:bg-blue-50">
             N
           </a>
@@ -139,7 +139,7 @@ const Login = () => {
           <span className="h-px flex-1 bg-slate-200" />
           <span>Or</span>
           <span className="h-px flex-1 bg-slate-200" />
-        </div>
+        </div> */}
 
         {formik.status && (
           <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">

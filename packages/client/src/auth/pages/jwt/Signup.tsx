@@ -48,7 +48,7 @@ const Signup = () => {
     initialValues,
     validationSchema: signupSchema,
     onSubmit: async (values, { setStatus, setSubmitting }) => {
-      setLoading(true);
+      setLoading(true); 
       try {
         if (!register) {
           throw new Error('JWTProvider is required for this form.');

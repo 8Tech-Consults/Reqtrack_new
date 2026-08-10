@@ -12,7 +12,7 @@ const CheckEmail = () => {
             className="dark:hidden max-h-[130px]"
             alt=""
           />
-          <img
+          <img 
             src={toAbsoluteUrl('/media/illustrations/30-dark.svg')}
             className="light:hidden max-h-[130px]"
             alt=""

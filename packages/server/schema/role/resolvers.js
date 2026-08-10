@@ -4,7 +4,6 @@ import saveData from "../../utils/db/saveData.js";
 import { JSONResolver } from "graphql-scalars";
 import tryParseJSON from "../../helpers/tryParseJSON.js";
 import checkPermission from "../../helpers/checkPermission.js";
-import { v4 as uuidv4 } from "uuid";
 import requireAnyPermission from "../../helpers/requireAnyPermission.js";
 
 export const getRoles = async ({ id, role_name }) => {
@@ -68,9 +67,6 @@ const roleResolvers = {
           name: role_name,
           description: description || null,
         };
-        if (!id) {
-          data.id = uuidv4();
-        }
 
         const save_id = await saveData({
           table: "roles",

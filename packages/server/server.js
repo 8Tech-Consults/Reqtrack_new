@@ -251,7 +251,6 @@ const buildVerificationPage = ({ isValid, message, label }) => {
       <section class="details">
         ${details}
       </section>
-      <p class="footer-note">STTS • Ministry of Agriculture, Animal Industry and Fisheries</p>
     </main>
   </body>
 </html>`;
@@ -824,6 +823,7 @@ app.post("/api/ai/summarize", async (req, res) => {
 const server = new ApolloServer({
   typeDefs,
   resolvers,
+  introspection: true,
   plugins: [
     ApolloServerPluginDrainHttpServer({ httpServer }),
     {

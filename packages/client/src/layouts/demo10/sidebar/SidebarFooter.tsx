@@ -68,12 +68,13 @@ const SidebarFooter = forwardRef<HTMLDivElement, any>((props, ref) => {
           </MenuItem>
         </Menu>
 
-        <div
+        <button
+          type="button"
           onClick={logout}
           className="btn btn-icon btn-icon-lg size-8 hover:bg-light hover:text-primary text-gray-600"
         >
           <KeenIcon icon="exit-right" />
-        </div>
+        </button>
       </div>
     </div>
   );

@@ -35,10 +35,14 @@ export const MODULES_CONFIG: ModuleConfig[] = [
     name: "Project Planning",
     icon: Route,
     permissions: [
+      { id: "can_manage_templates", label: "Can Manage Templates" },
+      { id: "can_edit_templates", label: "Can Edit Templates" },
       { id: "can_manage_projects", label: "Can Manage Projects" },
       { id: "can_create_projects", label: "Can Create Projects" },
       { id: "can_edit_projects", label: "Can Edit Projects" },
-      { id: "can_manage_templates", label: "Can Manage Templates" },
+      { id: "can_delete_projects", label: "Can Delete Projects" },
+      { id: "can_view_projects", label: "Can View Projects" },
+      { id: "can_view_own_projects", label: "Can View Own Projects" },
     ],
   },
   {

@@ -332,6 +332,13 @@ const AuthProvider = ({ children }: PropsWithChildren) => {
   const logout = () => {
     saveAuth(undefined);
     setCurrentUser(undefined);
+
+    if (typeof window !== 'undefined') {
+      const loginPath = '/auth/login';
+      if (window.location.pathname !== loginPath) {
+        window.location.replace(loginPath);
+      }
+    }
   };
 
   return (

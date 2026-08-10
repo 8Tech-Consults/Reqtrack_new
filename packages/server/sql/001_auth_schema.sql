@@ -3,7 +3,7 @@
 
 -- Roles
 CREATE TABLE IF NOT EXISTS roles (
-  id CHAR(36) NOT NULL DEFAULT (UUID()),
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   name VARCHAR(100) NOT NULL,
   description VARCHAR(255) NULL,
   -- JSON string (MariaDB JSON is LONGTEXT with validation in some versions)
@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS users (
   phone_number VARCHAR(50) NULL,
   password VARCHAR(255) NOT NULL,
   image VARCHAR(255) NULL,
-  role_id CHAR(36) NULL,
+  role_id BIGINT UNSIGNED NULL,
   status VARCHAR(30) NOT NULL DEFAULT 'active',
 
   -- Flags used by existing JWT payload on server
@@ -52,25 +52,27 @@ CREATE TABLE IF NOT EXISTS users (
 -- You can generate one quickly in Node/Bun:
 --   node -e "console.log(require('bcrypt').hashSync('Admin@123', 10))"
 
-SET @super_role_id = '11111111-1111-1111-1111-111111111111';
-SET @basic_role_id = '33333333-3333-3333-3333-333333333333';
+SET @super_role_id = NULL;
+SET @basic_role_id = NULL;
 SET @user_id = '22222222-2222-2222-2222-222222222222';
 
-INSERT IGNORE INTO roles (id, name, description, permissions)
+INSERT IGNORE INTO roles (name, description, permissions)
 VALUES (
-  @super_role_id,
   'Super Admin',
   'Full access',
   '[{"can_create_users":true},{"can_view_settings":true},{"can_manage_users":true},{"can_manage_roles":true},{"can_view_roles":true},{"can_create_roles":true},{"can_delete_roles":true},{"can_manage_disabilities":true},{"can_update_role_permissions":true},{"can_manage_du":true},{"can_create_du":true},{"can_view_du":true},{"can_delete_du":true},{"can_manage_pwds":true},{"can_create_pwds":true},{"can_view_pwds":true},{"can_delete_pwds":true},{"can_manage_sp":true},{"can_create_sp":true},{"can_view_sp":true},{"can_delete_sp":true},{"can_manage_gc":true},{"can_create_gc":true},{"can_view_gc":true},{"can_delete_gc":true},{"can_manage_ps":true},{"can_create_ps":true},{"can_view_ps":true},{"can_delete_ps":true},{"can_manage_inn":true},{"can_create_inn":true},{"can_view_inn":true},{"can_delete_inn":true},{"can_manage_dis":true},{"can_create_dis":true},{"can_view_dis":true},{"can_delete_dis":true}]'
 );
 
-INSERT IGNORE INTO roles (id, name, description, permissions)
+SELECT id INTO @super_role_id FROM roles WHERE name = 'Super Admin' LIMIT 1;
+
+INSERT IGNORE INTO roles (name, description, permissions)
 VALUES (
-  @basic_role_id,
   'PWD',
   'Default role for new accounts',
   '[]'
 );
+
+SELECT id INTO @basic_role_id FROM roles WHERE name = 'PWD' LIMIT 1;
 
 -- Example bcrypt hash for 'Admin@123' (replace if you want):
 -- This hash value is only a placeholder; generate your own before production use.

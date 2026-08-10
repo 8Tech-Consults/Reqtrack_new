@@ -11,7 +11,7 @@ const TwoFactorAuth = () => {
     const updatedInputs = [...codeInputs];
     updatedInputs[index] = value;
     setCodeInputs(updatedInputs);
-  };
+  }; 
 
   return (
     <div className="card max-w-[380px] w-full">

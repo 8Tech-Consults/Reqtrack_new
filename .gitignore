@@ -1,4 +1,4 @@
-/packages/client/node_modules
+# /packages/client/node_modules
 
 # dependencies (bun install)
 node_modules

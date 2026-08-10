@@ -1,13 +1,13 @@
 -- Requisition system core schema
 -- Covers template design, annual programs, year budget inputs, requisitions, and accountability.
--- Designed for MariaDB/MySQL using UUID-style CHAR(36) keys.
+-- Designed for MariaDB/MySQL using bigint auto-increment keys for all non-user tables.
 
 -- =====================================
 -- 1) TEMPLATE DESIGN (Admin)
 -- =====================================
 
 CREATE TABLE IF NOT EXISTS project_templates (
-  id CHAR(36) NOT NULL DEFAULT (UUID()),
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   name VARCHAR(180) NOT NULL,
   description TEXT NULL,
   status VARCHAR(20) NOT NULL DEFAULT 'active',
@@ -27,8 +27,8 @@ CREATE TABLE IF NOT EXISTS project_templates (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS template_outcomes (
-  id CHAR(36) NOT NULL DEFAULT (UUID()),
-  template_id CHAR(36) NOT NULL,
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  template_id BIGINT UNSIGNED NOT NULL,
   name VARCHAR(255) NOT NULL,
   sort_order INT NOT NULL DEFAULT 0,
   deleted TINYINT(1) NOT NULL DEFAULT 0,
@@ -42,8 +42,8 @@ CREATE TABLE IF NOT EXISTS template_outcomes (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS template_outputs (
-  id CHAR(36) NOT NULL DEFAULT (UUID()),
-  outcome_id CHAR(36) NOT NULL,
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  outcome_id BIGINT UNSIGNED NOT NULL,
   name VARCHAR(255) NOT NULL,
   sort_order INT NOT NULL DEFAULT 0,
   deleted TINYINT(1) NOT NULL DEFAULT 0,
@@ -57,8 +57,8 @@ CREATE TABLE IF NOT EXISTS template_outputs (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS template_activities (
-  id CHAR(36) NOT NULL DEFAULT (UUID()),
-  output_id CHAR(36) NOT NULL,
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  output_id BIGINT UNSIGNED NOT NULL,
   name VARCHAR(255) NOT NULL,
   sort_order INT NOT NULL DEFAULT 0,
   deleted TINYINT(1) NOT NULL DEFAULT 0,
@@ -72,8 +72,8 @@ CREATE TABLE IF NOT EXISTS template_activities (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS template_budget_lines (
-  id CHAR(36) NOT NULL DEFAULT (UUID()),
-  activity_id CHAR(36) NOT NULL,
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  activity_id BIGINT UNSIGNED NOT NULL,
   name VARCHAR(255) NOT NULL,
   sort_order INT NOT NULL DEFAULT 0,
   deleted TINYINT(1) NOT NULL DEFAULT 0,
@@ -91,8 +91,8 @@ CREATE TABLE IF NOT EXISTS template_budget_lines (
 -- =====================================
 
 CREATE TABLE IF NOT EXISTS project_years (
-  id CHAR(36) NOT NULL DEFAULT (UUID()),
-  template_id CHAR(36) NOT NULL,
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  template_id BIGINT UNSIGNED NOT NULL,
   financial_year INT NOT NULL,
   status VARCHAR(30) NOT NULL DEFAULT 'Planning',
   start_date DATE NULL,
@@ -119,9 +119,9 @@ CREATE TABLE IF NOT EXISTS project_years (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS annual_budget_inputs (
-  id CHAR(36) NOT NULL DEFAULT (UUID()),
-  project_year_id CHAR(36) NOT NULL,
-  budget_line_id CHAR(36) NOT NULL,
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  project_year_id BIGINT UNSIGNED NOT NULL,
+  budget_line_id BIGINT UNSIGNED NOT NULL,
   quantity DECIMAL(18,2) NOT NULL DEFAULT 1.00,
   frequency DECIMAL(18,2) NOT NULL DEFAULT 1.00,
   unit_cost DECIMAL(18,2) NOT NULL DEFAULT 0.00,
@@ -146,9 +146,9 @@ CREATE TABLE IF NOT EXISTS annual_budget_inputs (
 -- =====================================
 
 CREATE TABLE IF NOT EXISTS requisitions (
-  id CHAR(36) NOT NULL DEFAULT (UUID()),
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   requisition_no VARCHAR(50) NULL,
-  project_year_id CHAR(36) NOT NULL,
+  project_year_id BIGINT UNSIGNED NOT NULL,
   requested_by CHAR(36) NOT NULL,
   title VARCHAR(255) NOT NULL,
   purpose TEXT NULL,
@@ -180,9 +180,9 @@ CREATE TABLE IF NOT EXISTS requisitions (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS requisition_items (
-  id CHAR(36) NOT NULL DEFAULT (UUID()),
-  requisition_id CHAR(36) NOT NULL,
-  budget_line_id CHAR(36) NULL,
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  requisition_id BIGINT UNSIGNED NOT NULL,
+  budget_line_id BIGINT UNSIGNED NULL,
   description VARCHAR(255) NOT NULL,
   quantity DECIMAL(18,2) NOT NULL DEFAULT 1.00,
   frequency DECIMAL(18,2) NOT NULL DEFAULT 1.00,
@@ -206,8 +206,8 @@ CREATE TABLE IF NOT EXISTS requisition_items (
 -- =====================================
 
 CREATE TABLE IF NOT EXISTS accountability_records (
-  id CHAR(36) NOT NULL DEFAULT (UUID()),
-  requisition_id CHAR(36) NOT NULL,
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  requisition_id BIGINT UNSIGNED NOT NULL,
   account_no VARCHAR(50) NULL,
   reported_by CHAR(36) NOT NULL,
   status VARCHAR(30) NOT NULL DEFAULT 'Draft',
@@ -233,9 +233,9 @@ CREATE TABLE IF NOT EXISTS accountability_records (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS accountability_items (
-  id CHAR(36) NOT NULL DEFAULT (UUID()),
-  accountability_id CHAR(36) NOT NULL,
-  requisition_item_id CHAR(36) NULL,
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  accountability_id BIGINT UNSIGNED NOT NULL,
+  requisition_item_id BIGINT UNSIGNED NULL,
   description VARCHAR(255) NOT NULL,
   accounted_amount DECIMAL(18,2) NOT NULL DEFAULT 0.00,
   reference_no VARCHAR(120) NULL,
