@@ -48,7 +48,6 @@ type User = {
   id: string | number;
   username: string;
   name?: string;
-  company_initials?: string;
   phone_number?: string;
   premises_location?: string;
   email?: string;
@@ -99,7 +98,6 @@ const UserFormDialog = ({
     id: "",
     username: "",
     name: "",
-    company_initials: "",
     phone_number: "",
     premises_location: "",
     email: "",
@@ -116,7 +114,6 @@ const UserFormDialog = ({
         id: String(initialValues?.id ?? ""),
         username: initialValues?.username ?? "",
         name: initialValues?.name ?? "",
-        company_initials: initialValues?.company_initials ?? "",
         phone_number: initialValues?.phone_number ?? "",
         premises_location: initialValues?.premises_location ?? "",
         email: initialValues?.email ?? "",
@@ -147,7 +144,6 @@ const UserFormDialog = ({
       id: form.id ? String(form.id) : null,
       username: form.username,
       name: form.name,
-      company_initials: form.company_initials,
       phone_number: form.phone_number,
       premises_location: form.premises_location,
       email: form.email,
@@ -203,18 +199,7 @@ const UserFormDialog = ({
                 required={!isEditing}
               />
             </div>
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-1 block">
-                Company initials
-              </label>
-              <Input
-                value={form.company_initials}
-                onChange={(e) =>
-                  setForm({ ...form, company_initials: e.target.value })
-                }
-                required={!isEditing}
-              />
-            </div>
+            
             <div>
               <label className="text-sm font-medium text-gray-700 mb-1 block">
                 Email
@@ -390,7 +375,7 @@ const UserPreviewDialog = ({
                 {user.username}
               </div>
               <div className="text-sm text-gray-700">
-                {user.name} {user.company_initials}
+                {user.name}
               </div>
               <div className="text-sm text-gray-700">{user.email}</div>
               <div className="text-sm text-gray-700">{user.district}</div>
@@ -411,8 +396,7 @@ const UsersListPage = () => {
   const apolloClient = useApolloClient();
   const [refreshKey, setRefreshKey] = useState(0);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const { data: rolesData, loading: rolesLoading, error: rolesError } =
-    useQuery<RolesResponse>(ROLES);
+  const { data: rolesData, loading: rolesLoading, error: rolesError } = useQuery(ROLES);
   const [createUser, { loading: saving }] = useMutation(CREATE_USER);
   const [deleteUser] = useMutation(DELETE_USER);
 
@@ -672,7 +656,7 @@ const UsersDataGrid = ({
               alt={row.original.username}
             />
             <div>
-              <div className="text-sm font-semibold text-gray-800">{`${row.original.name} ${row.original.company_initials}`}</div>
+              <div className="text-sm font-semibold text-gray-800">{row.original.name}</div>
               <div className="text-xs text-gray-600">{`@${row.original.username}`}</div>
             </div>
           </div>

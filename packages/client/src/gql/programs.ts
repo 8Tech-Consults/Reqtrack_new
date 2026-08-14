@@ -90,7 +90,7 @@ export type ProgramBudgetLine = {
   quantity: number;
   frequency: number;
   unitPrice: number;
-  units: number;
+  units: string;
   totalAmount: number;
   sortOrder: number;
 };

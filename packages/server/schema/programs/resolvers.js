@@ -292,6 +292,7 @@ const programsResolvers = {
       if (!programId) {
         throw new GraphQLError('Program is required.', { extensions: { code: 'BAD_USER_INPUT' } });
       }
+      
 
       const [[program]] = await db.execute(`SELECT id FROM programs WHERE id = ? AND deleted = 0 LIMIT 1`, [programId]);
       if (!program) {
@@ -301,50 +302,88 @@ const programsResolvers = {
       const connection = await db.getConnection();
       try {
         await connection.beginTransaction();
+        for (const row of input?.outcomes || []) {
+          const data = {
+            id: row?.id ? String(row.id) : null,
+            program_id: programId,
+            name: String(row?.name || '').trim(),
+            sort_order: Number.isFinite(Number(row?.sortOrder)) ? Number(row.sortOrder) : 0,
+            deleted: 0,
+            created_at: new Date(),
+            updated_at: new Date()
+          };
 
-        const outcomeIds = await syncStructureLevel({
-          connection,
-          table: 'program_outcomes',
-          parentColumn: 'program_id',
-          parentId: programId,
-          items: Array.isArray(input?.outcomes) ? input.outcomes : []
-        });
-
-        for (const [outcomeIndex, outcome] of (Array.isArray(input?.outcomes) ? input.outcomes : []).entries()) {
-          const outcomeId = outcomeIds[outcomeIndex];
-          const outputs = Array.isArray(outcome?.outputs) ? outcome.outputs : [];
-          const outputIds = await syncStructureLevel({
+          const outcomeId = await saveData({
             connection,
-            table: 'program_outputs',
-            parentColumn: 'outcome_id',
-            parentId: outcomeId,
-            items: outputs
+            table: 'program_outcomes',
+            id: row?.id ? String(row.id) : null,
+            data: data
           });
 
-          for (const [outputIndex, output] of outputs.entries()) {
-            const outputId = outputIds[outputIndex];
-            const activities = Array.isArray(output?.activities) ? output.activities : [];
-            const activityIds = await syncStructureLevel({
+          for (const output of row?.outputs || []) {
+            // const outcomeId = outcomeId;
+            const outputData = {
+              id: output?.id ? String(output.id) : null,
+              outcome_id: outcomeId,
+              name: String(output?.name || '').trim(),
+              sort_order: Number.isFinite(Number(output?.sortOrder)) ? Number(output.sortOrder) : 0,
+              deleted: 0
+            };
+            // const outputs = Array.isArray(row?.outputs) ? row.outputs : [];
+            const outputId = await saveData({
               connection,
-              table: 'program_activities',
-              parentColumn: 'output_id',
-              parentId: outputId,
-              items: activities
+              table: 'program_outputs',
+              id: output?.id ? String(output.id) : null,
+              data: outputData
             });
 
-            for (const [activityIndex, activity] of activities.entries()) {
-              const activityId = activityIds[activityIndex];
-              await syncStructureLevel({
+            console.log('outputId', outputId)
+
+            for (const activities of output?.activities || []) {
+              const activityData = {
+                id: activities?.id ? String(activities.id) : null,
+                output_id: outputId,
+                name: String(activities?.name || '').trim(),
+                sort_order: Number.isFinite(Number(activities?.sortOrder)) ? Number(activities.sortOrder) : 0,
+                deleted: 0
+              }
+
+              const activityId = await saveData({
                 connection,
-                table: 'program_budget_lines',
-                parentColumn: 'activity_id',
-                parentId: activityId,
-                items: Array.isArray(activity?.budgetLines) ? activity.budgetLines : []
+                table: 'program_activities',
+                id: activities?.id ? String(activities.id) : null,
+                data: activityData,
               });
+              console.log('activityId', activityId)
+
+              for (const budgetLine of activities?.budgetLines || []) {
+                const budgetLineData = {
+                  id: budgetLine?.id ? String(budgetLine.id) : null,
+                  activity_id: activityId,
+                  name: String(budgetLine?.name || '').trim(),
+                  sort_order: Number.isFinite(Number(budgetLine?.sortOrder)) ? Number(budgetLine.sortOrder) : 0,
+                  quantity: Number.isFinite(Number(budgetLine?.quantity)) ? Number(budgetLine.quantity) : 1,
+                  frequency: Number.isFinite(Number(budgetLine?.frequency)) ? Number(budgetLine.frequency) : 1,
+                  unit_price: Number.isFinite(Number(budgetLine?.unitPrice)) ? Number(budgetLine.unitPrice) : 0,
+                  units: String(budgetLine?.units || '').trim(),
+                  total_amount: Number.isFinite(Number(budgetLine?.totalAmount))
+                    ? Number(budgetLine.totalAmount)
+                    : (Number.isFinite(Number(budgetLine?.quantity)) ? Number(budgetLine.quantity) : 1) *
+                      (Number.isFinite(Number(budgetLine?.frequency)) ? Number(budgetLine.frequency) : 1) *
+                      (Number.isFinite(Number(budgetLine?.unitPrice)) ? Number(budgetLine.unitPrice) : 0),
+
+                }
+
+                await saveData({
+                  connection,
+                  table: 'program_budget_lines',
+                  id: budgetLine?.id ? String(budgetLine.id) : null,
+                  data: budgetLineData
+                });
+              }
             }
           }
         }
-
         await connection.commit();
         return { success: true, message: 'Program structure saved successfully.' };
       } catch (error) {

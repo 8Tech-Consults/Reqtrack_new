@@ -4,22 +4,38 @@ import { useLanguage } from '@/i18n';
 import { KeenIcon, Menu, MenuItem, MenuToggle } from '@/components';
 
 import { DropdownCard2 } from '@/partials/dropdowns/general';
+import { useQuery } from '@apollo/client/react';
+import { REQUISITIONSTATUSCHART } from '@/gql/dashboard';
 
 interface IContributionsProps {
   title: string;
+  statusData: any[]
 }
 
-const Contributions = ({ title }: IContributionsProps) => {
-  const { isRTL } = useLanguage();
-  const data: number[] = [44, 55, 41, 17, 15];
-  const labels: string[] = ['ERP', 'HRM', 'DMS', 'CRM', 'DAM'];
-  const colors: string[] = [
-    'var(--tw-primary)',
-    'var(--tw-brand)',
-    'var(--tw-success)',
-    'var(--tw-info)',
-    'var(--tw-warning)'
-  ];
+const Contributions = ({ title, statusData }: IContributionsProps) => {
+
+const summary = statusData?.requisitionStatusChart;
+
+const { isRTL } = useLanguage();
+
+const labels: string[] = ['Pending', 'Accepted', 'Approved', 'Rejected', 'Need amendment', 'Amended'];
+const data: number[] = summary
+  ? [
+      summary.pendingCount,
+      summary.acceptedCount,
+      summary.approvedCount,
+      summary.rejectedCount,
+      summary.requireAmendmentCount,
+      summary.amendedCount,
+    ]
+  : [0, 0, 0, 0, 0];
+const colors: string[] = [
+  'var(--tw-warning)',
+  'var(--tw-info)',
+  'var(--tw-success)',
+  'var(--tw-danger)',
+  'var(--tw-brand)',
+];
 
   const options: ApexOptions = {
     series: data,
@@ -61,7 +77,7 @@ const Contributions = ({ title }: IContributionsProps) => {
         breakpoint: 480,
         options: {
           chart: {
-            width: 200
+            width: 400
           },
           legend: {
             position: 'bottom'
@@ -72,7 +88,7 @@ const Contributions = ({ title }: IContributionsProps) => {
   };
 
   return (
-    <div className="card">
+    <div className="card min-h-[300px]">
       <div className="card-header">
         <h3 className="card-title">{title}</h3>
 
@@ -107,7 +123,7 @@ const Contributions = ({ title }: IContributionsProps) => {
           series={options.series}
           type="donut"
           width="100%"
-          height="178.7"
+          height="480"
         />
       </div>
     </div>

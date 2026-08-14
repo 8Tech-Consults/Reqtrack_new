@@ -315,46 +315,7 @@ const userResolvers = {
         search: args?.search || undefined,
       });
     },
-    duAgents: async (_, args, context) => {
-      const userPermissions = context?.req?.user?.permissions;
-      ensureAnyPermission(
-        userPermissions,
-        ["can_manage_du"],
-        "You dont have permissions to view DU agents"
-      );
-
-      const duRole = await getDuAgentsRole();
-      const limit = Number.isFinite(args?.limit)
-        ? Math.max(1, Number(args.limit))
-        : 10;
-      const offset = Number.isFinite(args?.offset)
-        ? Math.max(0, Number(args.offset))
-        : 0;
-
-      return await getUsers({
-        limit,
-        offset,
-        role_id: duRole.id,
-        district: args?.district || undefined,
-        search: args?.search || undefined,
-      });
-    },
-    duAgentsCount: async (_, args, context) => {
-      const userPermissions = context?.req?.user?.permissions;
-      ensureAnyPermission(
-        userPermissions,
-        ["can_manage_du"],
-        "You dont have permissions to view DU agents"
-      );
-
-      const duRole = await getDuAgentsRole();
-
-      return await getUsersCount({
-        role_id: duRole.id,
-        district: args?.district || undefined,
-        search: args?.search || undefined,
-      });
-    },
+    
     me: async (_, args, context) => {
       const user_id = context.req.user.id;
 
@@ -475,7 +436,7 @@ const userResolvers = {
         id,
         username,
         name,
-        company_initials,
+        // company_initials,
         premises_location,
         phone_number,
         password,
@@ -502,7 +463,7 @@ const userResolvers = {
         const normalizedUsername = String(username || "").trim();
         const normalizedEmail = String(email || "").trim().toLowerCase();
         const normalizedName = String(name || "").trim();
-        const normalizedCompanyInitials = String(company_initials || "").trim();
+        // const normalizedCompanyInitials = String(company_initials || "").trim();
         const normalizedPremisesLocation = String(premises_location || "").trim();
         const normalizedPhoneNumber = String(phone_number || "").trim() || null;
         const normalizedDistrict = String(district || "").trim();
@@ -513,9 +474,9 @@ const userResolvers = {
         if (!normalizedName) {
           throw new GraphQLError("Name is required.");
         }
-        if (!normalizedCompanyInitials) {
-          throw new GraphQLError("Company initials are required.");
-        }
+        // if (!normalizedCompanyInitials) {
+        //   throw new GraphQLError("Company initials are required.");
+        // }
         if (!normalizedEmail) {
           throw new GraphQLError("Email is required.");
         }
@@ -597,9 +558,9 @@ const userResolvers = {
           username: normalizedUsername,
           email: normalizedEmail,
           name: normalizedName,
-          staff_number: normalizedCompanyInitials,
+          //staff_number: normalizedCompanyInitials,
           // premises_location: normalizedPremisesLocation,
-          phone_number: normalizedPhoneNumber,
+          // phone_number: normalizedPhoneNumber,
           district: normalizedDistrict,
           role_id: resolvedRoleId,
           updated_at: new Date(),
@@ -646,84 +607,7 @@ const userResolvers = {
         throw new GraphQLError(error.message);
       }
     },
-    saveDuAgent: async (_parent, args, context) => {
-      const userPermissions = context?.req?.user?.permissions;
-      ensureAnyPermission(
-        userPermissions,
-        ["can_manage_du"],
-        "You dont have permissions to manage DU agents"
-      );
-
-      const {
-        id,
-        username,
-        name,
-        email,
-        phone_number,
-        district,
-        premises_location,
-        company_initials,
-        password,
-      } = args.payload;
-
-      const isUpdate = Boolean(id);
-
-      if (!isUpdate && !password) {
-        throw new GraphQLError("Password is required for new DU agents");
-      }
-
-      const duRole = await getDuAgentsRole();
-
-      if (!isUpdate) {
-        const existing = await getUsers({ email, limit: 1 });
-        if (existing[0]) throw new GraphQLError("User email already exists!");
-
-        const [usernameExists] = await getUsers({ username, limit: 1 });
-        if (usernameExists) throw new GraphQLError("Username already exists!");
-      } else {
-        const [existingUser] = await getUsers({ id, limit: 1 });
-        if (!existingUser) throw new GraphQLError("DU agent not found");
-        if (String(existingUser.role_id || "") !== String(duRole.id)) {
-          throw new GraphQLError("Only DU agents can be updated here");
-        }
-      }
-
-      const data = {
-        username,
-        email,
-        name,
-        company_initials: company_initials || "",
-        premises_location: premises_location || "",
-        phone_number: phone_number || "",
-        district: district || "",
-        role_id: duRole.id,
-        updated_at: new Date(),
-      };
-
-      if (!isUpdate) {
-        const salt = await bcrypt.genSalt();
-        data.password = await bcrypt.hash(password, salt);
-        data.created_at = new Date();
-        data.id = uuidv4();
-      } else if (password) {
-        const salt = await bcrypt.genSalt();
-        data.password = await bcrypt.hash(password, salt);
-      }
-
-      await saveData({
-        table: "users",
-        data,
-        id: isUpdate ? id : null,
-      });
-
-      return {
-        success: true,
-        message: isUpdate
-          ? "DU agent updated successfully"
-          : "DU agent created successfully",
-        user: { id: id || data.id, ...data, role_name: duRole.name },
-      };
-    },
+   
     updateUser: async (parent, args, context) => {
       // Validate user authentication/authorization first
       // if (!context.user) {
@@ -773,6 +657,8 @@ const userResolvers = {
             extensions: { code: "NOT_FOUND" },
           });
         }
+
+        console.log("Updating user:" )
 
         // Prepare update data
         const updateData = {
@@ -1180,44 +1066,7 @@ const userResolvers = {
         throw new GraphQLError("Failed to deactivate user account");
       }
     },
-    deleteDuAgent: async (_parent, args, context) => {
-      const { user_id } = args;
-      const userPermissions = context?.req?.user?.permissions;
-      ensureAnyPermission(
-        userPermissions,
-        ["can_manage_du"],
-        "You dont have permissions to delete DU agents"
-      );
-
-      if (!user_id) {
-        throw new GraphQLError("User ID is required");
-      }
-
-      const duRole = await getDuAgentsRole();
-      const [user] = await getUsers({ id: user_id, limit: 1 });
-
-      if (!user) {
-        throw new GraphQLError("DU agent not found");
-      }
-
-      if (String(user.role_id || "") !== String(duRole.id)) {
-        throw new GraphQLError("Only DU agents can be deleted here");
-      }
-
-      await saveData({
-        table: "users",
-        data: {
-          deleted: true,
-          updated_at: new Date(),
-        },
-        id: user_id,
-      });
-
-      return {
-        success: true,
-        message: "DU agent deleted successfully",
-      };
-    },
+    
 
     deleteAccount: async (_parent, args, context) => {
       const userId = context?.req?.user?.id;

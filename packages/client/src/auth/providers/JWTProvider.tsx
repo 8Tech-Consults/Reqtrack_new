@@ -72,7 +72,7 @@ interface AuthContextProps {
   register: (payload: {
     username: string;
     name: string;
-    company_initials: string;
+    // company_initials: string;
     premises_location: string;
     phone_number: string;
     email: string;
@@ -174,7 +174,7 @@ const AuthProvider = ({ children }: PropsWithChildren) => {
   const register = async (payload: {
     username: string;
     name: string;
-    company_initials: string;
+    // company_initials: string;
     premises_location: string;
     phone_number: string;
     email: string;

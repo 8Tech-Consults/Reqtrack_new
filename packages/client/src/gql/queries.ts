@@ -18,7 +18,7 @@ const LOAD_USERS = gql`
       id
       username
       name
-      staff_number
+      # staff_number
       phone_number
       email
       district
@@ -74,7 +74,7 @@ query Me {
     id
     username
     name
-    staff_number
+    # staff_number
     email
     district
     phone_number

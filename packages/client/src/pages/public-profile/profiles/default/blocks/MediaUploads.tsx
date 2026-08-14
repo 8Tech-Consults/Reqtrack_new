@@ -6,23 +6,39 @@ import { KeenIcon, Menu, MenuItem, MenuToggle } from '@/components';
 
 import { DropdownCard2 } from '@/partials/dropdowns/general';
 
-const MediaUploads = () => {
+const MediaUploads = ({ExpenseData}) => {
   const { isRTL } = useLanguage();
-  const data: number[] = [85, 65, 50, 70, 40, 45, 100, 55, 85, 60, 70, 90];
+  // const data: number[] = [85, 65, 50, 70, 40, 45, 100, 55, 85, 60, 70, 90];
+  // const categories: string[] = [
+  //   'Jan',
+  //   'Feb',
+  //   'Mar',
+  //   'Apr',
+  //   'May',
+  //   'Jun',
+  //   'Jul',
+  //   'Aug',
+  //   'Sep',
+  //   'Oct',
+  //   'Nov',
+  //   'Dec'
+  // ];
   const categories: string[] = [
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec'
-  ];
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+
+console.log('data.............', ExpenseData)
+  
+
+  const data: number[] = (() => {
+    const byMonth = new Array(12).fill(0);
+    (ExpenseData?.yearExpense ?? []).forEach((entry) => {
+      byMonth[entry.month - 1] = entry.totalAmount;
+    });
+    return byMonth;
+  })();
+  console.log('data expense', data)
 
   const options: ApexOptions = {
     series: [
@@ -83,7 +99,7 @@ const MediaUploads = () => {
     },
     yaxis: {
       min: 0,
-      max: 100,
+      // max: 100,
       tickAmount: 5,
       axisTicks: {
         show: false
@@ -93,7 +109,7 @@ const MediaUploads = () => {
           colors: 'var(--tw-gray-500)',
           fontSize: '12px'
         },
-        formatter: (defaultValue: number) => `$${defaultValue}K`
+        formatter: (defaultValue: number) => `UGX${defaultValue}K`
       }
     },
     tooltip: {
@@ -165,7 +181,7 @@ const MediaUploads = () => {
     <Fragment>
       <div className="card">
         <div className="card-header">
-          <h3 className="card-title">Media Uploads</h3>
+          <h3 className="card-title">Funds Disbursed Per Year</h3>
 
           <Menu>
             <MenuItem

@@ -10,7 +10,7 @@ const LOGIN = gql`
         id
         username
         name
-        staff_number
+        # staff_number
         email
         district
         phone_number
@@ -33,7 +33,7 @@ const SIGNUP = gql`
         id
         username
         name
-        staff_number
+        # staff_number
         phone_number
         email
         district

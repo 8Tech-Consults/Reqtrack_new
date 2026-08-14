@@ -1,9 +1,16 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { Dispatch, FormEvent, SetStateAction, useEffect, useMemo, useState } from 'react';
+import { ChevronDown, ChevronRight, MoreVertical, Pencil, Trash2, ArrowRight, ChevronsRight } from 'lucide-react';
 import { useMutation, useQuery } from '@apollo/client/react';
 import { Container } from '@/components/container';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from '@/components/ui/dropdown-menu';
 import { useAuthContext } from '@/auth/useAuthContext';
 import { getPermissionsFromToken } from '@/utils/permissions';
 import { toast } from 'sonner';
@@ -46,13 +53,47 @@ type BudgetLineDraft = {
   units: string;
 };
 
-const calculateBudgetLineTotal = (draft: Pick<BudgetLineDraft, 'quantity' | 'frequency' | 'unitPrice' | 'units'>) => {
+const calculateBudgetLineTotal = (draft: Pick<BudgetLineDraft, 'quantity' | 'frequency' | 'unitPrice'>) => {
   const quantity = Number(draft.quantity || 0);
   const frequency = Number(draft.frequency || 0);
   const unitPrice = Number(draft.unitPrice || 0);
-  const units = Number(draft.units || 0);
-  return quantity * frequency * unitPrice * units;
+  return quantity * frequency * unitPrice ;
 };
+
+// Row-action kebab menu used at every hierarchy level below "Outcome".
+// Keeping this as one shared component keeps the Edit/Remove affordance
+// visually identical across Output / Activity / Budget Line rows.
+const RowActionsMenu = ({
+  onEdit,
+  onRemove,
+  editLabel = 'Edit'
+}: {
+  onEdit?: () => void;
+  onRemove: () => void;
+  editLabel?: string;
+}) => (
+  <DropdownMenu>
+    <DropdownMenuTrigger asChild>
+      <button
+        type="button"
+        className="btn btn-icon btn-sm btn-light shrink-0"
+        aria-label="Row actions"
+      >
+        <MoreVertical size={16} />
+      </button>
+    </DropdownMenuTrigger>
+    <DropdownMenuContent align="end" className="w-36">
+      {onEdit && (
+        <DropdownMenuItem onClick={onEdit} className="gap-2 text-slate-700">
+          <Pencil size={14} /> {editLabel}
+        </DropdownMenuItem>
+      )}
+      <DropdownMenuItem onClick={onRemove} className="gap-2 text-rose-600 focus:text-rose-600">
+        <Trash2 size={14} /> Remove
+      </DropdownMenuItem>
+    </DropdownMenuContent>
+  </DropdownMenu>
+);
 
 export const ProjectsPage = () => {
   const { auth } = useAuthContext();
@@ -99,6 +140,37 @@ export const ProjectsPage = () => {
   const [programManagerId, setProgramManagerId] = useState('');
   const [budgetSheetOpen, setBudgetSheetOpen] = useState(false);
   const [budgetDraft, setBudgetDraft] = useState<BudgetLineDraft | null>(null);
+  const [collapsedOutcomes, setCollapsedOutcomes] = useState<Set<string>>(new Set());
+  const [collapsedOutputs, setCollapsedOutputs] = useState<Set<string>>(new Set());
+  const [collapsedActivities, setCollapsedActivities] = useState<Set<string>>(new Set());
+
+  // Inline "Add a brief program description..." affordance (Program header).
+  // NOTE: SAVE_PROGRAM_STRUCTURE currently only persists the outcomes tree.
+  // This updates the local draft (and flags structureDirty) so it rides
+  // along with the next structure save; if description needs its own
+  // mutation/field on the backend, swap the onSave handler below to call it.
+  const [editingDescription, setEditingDescription] = useState(false);
+  const [descriptionDraft, setDescriptionDraft] = useState('');
+
+  const toggleId = (setter: Dispatch<SetStateAction<Set<string>>>, id: string) => {
+    setter((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleOutcome = (outcomeId: string) => toggleId(setCollapsedOutcomes, outcomeId);
+  const toggleOutput = (outputId: string) => toggleId(setCollapsedOutputs, outputId);
+  const toggleActivity = (activityId: string) => toggleId(setCollapsedActivities, activityId);
+
+  const activityTotal = (activity: ProgramRecord['outcomes'][number]['outputs'][number]['activities'][number]) =>
+    activity.budgetLines.reduce((sum, line) => sum + Number(line.totalAmount || 0), 0);
+  const outputTotal = (output: ProgramRecord['outcomes'][number]['outputs'][number]) =>
+    output.activities.reduce((sum, activity) => sum + activityTotal(activity), 0);
+  const outcomeTotal = (outcome: ProgramRecord['outcomes'][number]) =>
+    outcome.outputs.reduce((sum, output) => sum + outputTotal(output), 0);
 
   useEffect(() => {
     if (!programs.length) {
@@ -116,6 +188,8 @@ export const ProjectsPage = () => {
     const selected = programs.find((program) => program.id === selectedProgramId) || null;
     setDraftProgram(selected ? cloneProgram(selected) : null);
     setStructureDirty(false);
+    setEditingDescription(false);
+    setDescriptionDraft(selected?.description || '');
   }, [programs, selectedProgramId]);
 
   const selectedProgram = draftProgram;
@@ -197,11 +271,11 @@ export const ProjectsPage = () => {
       outputId,
       activityId,
       budgetLineId: null,
-      name: `Budget Line`,
+      name: ``,
       quantity: '1',
       frequency: '1',
       unitPrice: '0',
-      units: '1'
+      units: ''
     });
     setBudgetSheetOpen(true);
   };
@@ -263,7 +337,7 @@ export const ProjectsPage = () => {
       quantity: String(existingBudgetLine?.quantity ?? 1),
       frequency: String(existingBudgetLine?.frequency ?? 1),
       unitPrice: String(existingBudgetLine?.unitPrice ?? 0),
-      units: String(existingBudgetLine?.units ?? 1)
+      units: String(existingBudgetLine?.units ?? '')
     });
     setBudgetSheetOpen(true);
   };
@@ -287,7 +361,7 @@ export const ProjectsPage = () => {
         existingBudgetLine.quantity = Number(budgetDraft.quantity || 0);
         existingBudgetLine.frequency = Number(budgetDraft.frequency || 0);
         existingBudgetLine.unitPrice = Number(budgetDraft.unitPrice || 0);
-        existingBudgetLine.units = Number(budgetDraft.units || 0);
+        existingBudgetLine.units = budgetDraft.units || '';
         existingBudgetLine.totalAmount = totalAmount;
         existingBudgetLine.sortOrder = existingBudgetLine.sortOrder;
       } else {
@@ -297,7 +371,7 @@ export const ProjectsPage = () => {
           quantity: Number(budgetDraft.quantity || 0),
           frequency: Number(budgetDraft.frequency || 0),
           unitPrice: Number(budgetDraft.unitPrice || 0),
-          units: Number(budgetDraft.units || 0),
+          units: budgetDraft.units || '',
           totalAmount,
           sortOrder: activity.budgetLines.length
         });
@@ -438,10 +512,19 @@ export const ProjectsPage = () => {
       setStructureDirty(false);
       toast.success('Program structure saved successfully.');
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : 'Failed to save program structure.');
+      toast.error(error instanceof Error ? error.message: 'Failed to save program structure.' );
+      // setSaveError(error instanceof Error ? error.message : 'Failed to save program structure.');
     } finally {
       setSavingStructure(false);
     }
+  };
+
+  const handleSaveDescription = () => {
+    updateDraft((program) => {
+      program.description = descriptionDraft.trim();
+      return program;
+    });
+    setEditingDescription(false);
   };
 
   return (
@@ -462,13 +545,13 @@ export const ProjectsPage = () => {
           )}
         </div>
 
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        {/* <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
           <StatCard label="Programs" value={stats.programs} />
           <StatCard label="Total Budget" value={formatMoney(stats.budget)} />
           <StatCard label="Outcomes" value={stats.outcomes} />
           <StatCard label="Activities" value={stats.activities} />
           <StatCard label="Budget Lines" value={stats.budgetLines} />
-        </div>
+        </div> */}
 
         <Separator className="bg-slate-200" />
 
@@ -541,9 +624,52 @@ export const ProjectsPage = () => {
               ) : (
                 <>
                   <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
+                    <div className="flex-1 min-w-[220px]">
                       <h2 className="text-lg font-semibold text-slate-900">{selectedProgram.name}</h2>
-                      <p className="text-sm text-slate-500 mt-1">{selectedProgram.description || 'No description provided.'}</p>
+
+                      {editingDescription ? (
+                        <div className="mt-1 flex items-start gap-2">
+                          <input
+                            autoFocus
+                            className="input flex-1"
+                            value={descriptionDraft}
+                            placeholder="Add a brief program description..."
+                            onChange={(event) => setDescriptionDraft(event.target.value)}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter') handleSaveDescription();
+                              if (event.key === 'Escape') {
+                                setDescriptionDraft(selectedProgram.description || '');
+                                setEditingDescription(false);
+                              }
+                            }}
+                          />
+                          <button type="button" className="btn btn-sm btn-primary" onClick={handleSaveDescription}>
+                            Save
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-light"
+                            onClick={() => {
+                              setDescriptionDraft(selectedProgram.description || '');
+                              setEditingDescription(false);
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className="mt-1 flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700"
+                          onClick={() => {
+                            setDescriptionDraft(selectedProgram.description || '');
+                            setEditingDescription(true);
+                          }}
+                        >
+                          <span>{selectedProgram.description || 'Add a brief program description...'}</span>
+                          <Pencil size={12} className="shrink-0 text-slate-400" />
+                        </button>
+                      )}
                     </div>
                     <span className="badge badge-outline border-blue-200 bg-blue-50 text-blue-700">{selectedProgram.status}</span>
                   </div>
@@ -557,7 +683,151 @@ export const ProjectsPage = () => {
                       <label className="form-label text-slate-900">Program Manager</label>
                       <input className="input" value={selectedProgram.programManagerName || 'Unassigned'} readOnly />
                     </div>
-                    <div className="flex items-end gap-2">
+                    
+                  </div>
+
+                  {/* {saveError && <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{saveError}</div>} */}
+
+                  {/* <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+                    Create the program first, then manually add outcomes, outputs, activities, and budget lines below.
+                  </div> */}
+
+                  <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
+                    {selectedProgram.outcomes.map((outcome) => {
+                      const outcomeCollapsed = collapsedOutcomes.has(outcome.id);
+                      return (
+                        <div key={outcome.id} className="rounded-lg border border-slate-200 bg-white p-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <button
+                              type="button"
+                              className="btn btn-icon btn-sm btn-light shrink-0"
+                              onClick={() => toggleOutcome(outcome.id)}
+                              aria-label={outcomeCollapsed ? 'Expand outcome' : 'Collapse outcome'}
+                            >
+                              {outcomeCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
+                            </button>
+                            <input className="input flex-1 min-w-[160px] font-medium" value={outcome.name} onChange={(event) => renameOutcome(outcome.id, event.target.value)} />
+                            <input
+                              className="input w-40 shrink-0"
+                              value={formatMoney(outcomeTotal(outcome))}
+                              readOnly
+                              title="Total budget for this outcome"
+                            />
+                            <RowActionsMenu onRemove={() => removeOutcome(outcome.id)} />
+                          </div>
+
+                          {!outcomeCollapsed && (
+                            <div className="mt-2 space-y-2 pl-2 border-l-2 border-slate-200">
+                              {outcome.outputs.map((output) => {
+                                const outputCollapsed = collapsedOutputs.has(output.id);
+                                return (
+                                  <div key={output.id} className="rounded-lg border border-blue-200 bg-blue-50/40 p-2">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <button
+                                        type="button"
+                                        className="btn btn-icon btn-sm btn-light shrink-0"
+                                        onClick={() => toggleOutput(output.id)}
+                                        aria-label={outputCollapsed ? 'Expand output' : 'Collapse output'}
+                                      >
+                                        {outputCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
+                                      </button>
+                                      <ArrowRight size={14} className="text-blue-500 shrink-0" />
+                                      <input className="input flex-1 min-w-[160px]" value={output.name} onChange={(event) => renameOutput(outcome.id, output.id, event.target.value)} />
+                                      <input
+                                        className="input w-40 shrink-0"
+                                        value={formatMoney(outputTotal(output))}
+                                        readOnly
+                                        title="Total budget for this output"
+                                      />
+                                      <RowActionsMenu onRemove={() => removeOutput(outcome.id, output.id)} />
+                                    </div>
+
+                                    {!outputCollapsed && (
+                                      <div className="mt-2 space-y-2 pl-2 border-l-2 border-blue-200">
+                                        {output.activities.map((activity) => {
+                                          const activityCollapsed = collapsedActivities.has(activity.id);
+                                          return (
+                                            <div key={activity.id} className="rounded-lg border border-purple-200 bg-purple-50/40 p-2">
+                                              <div className="flex flex-wrap items-center gap-2">
+                                                <button
+                                                  type="button"
+                                                  className="btn btn-icon btn-sm btn-light shrink-0"
+                                                  onClick={() => toggleActivity(activity.id)}
+                                                  aria-label={activityCollapsed ? 'Expand activity' : 'Collapse activity'}
+                                                >
+                                                  {activityCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
+                                                </button>
+                                                <span className="flex items-center text-purple-500 shrink-0">
+                                                  <ChevronsRight size={14} />
+                                                </span>
+                                                <input
+                                                  className="input flex-1 min-w-[160px]"
+                                                  value={activity.name}
+                                                  onChange={(event) => renameActivity(outcome.id, output.id, activity.id, event.target.value)}
+                                                />
+                                                <input
+                                                  className="input w-40 shrink-0"
+                                                  value={formatMoney(activityTotal(activity))}
+                                                  readOnly
+                                                  title="Total budget for this activity"
+                                                />
+                                                <RowActionsMenu onRemove={() => removeActivity(outcome.id, output.id, activity.id)} />
+                                              </div>
+
+                                              {!activityCollapsed && (
+                                                <div className="mt-2 space-y-2 pl-2 border-l-2 border-purple-200">
+                                                  {activity.budgetLines.map((budgetLine) => (
+                                                    <div key={budgetLine.id} className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-2">
+                                                      <div className="flex flex-wrap items-center justify-between gap-2">
+                                                        <div className="flex items-start gap-2 min-w-0">
+                                                          <span className="flex items-center text-emerald-500 shrink-0 mt-0.5">
+                                                            <ChevronsRight size={14} />
+                                                            <ChevronsRight size={14} className="-ml-2" />
+                                                          </span>
+                                                          <div className="min-w-0">
+                                                            <p className="text-sm font-medium text-slate-900 truncate">{budgetLine.name}</p>
+                                                            <p className="text-xs text-slate-500">
+                                                              {budgetLine.quantity} x {budgetLine.frequency} x {formatMoney(budgetLine.unitPrice)} = {formatMoney(budgetLine.totalAmount)} {budgetLine.units}
+                                                            </p>
+                                                          </div>
+                                                        </div>
+                                                        <div className="flex items-center gap-2 shrink-0">
+                                                          <span className="text-sm font-semibold text-slate-900">{formatMoney(budgetLine.totalAmount)}</span>
+                                                          <RowActionsMenu
+                                                            editLabel="Edit"
+                                                            onEdit={() => openBudgetLineSheet(outcome.id, output.id, activity.id, budgetLine.id)}
+                                                            onRemove={() => removeBudgetLine(outcome.id, output.id, activity.id, budgetLine.id)}
+                                                          />
+                                                        </div>
+                                                      </div>
+                                                    </div>
+                                                  ))}
+                                                  <button type="button" className="btn btn-sm btn-light" onClick={() => addBudgetLine(outcome.id, output.id, activity.id)}>
+                                                    Add Budget Line
+                                                  </button>
+                                                </div>
+                                              )}
+                                            </div>
+                                          );
+                                        })}
+                                        <button type="button" className="btn btn-sm btn-light" onClick={() => addActivity(outcome.id, output.id)}>
+                                          Add Activity
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                              <button type="button" className="btn btn-sm btn-light" onClick={() => addOutput(outcome.id)}>
+                                Add Output
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="flex items-end gap-2">
                       <button type="button" className="btn btn-light" onClick={addOutcome}>
                         Add Outcome
                       </button>
@@ -565,85 +835,6 @@ export const ProjectsPage = () => {
                         {savingStructure ? 'Saving...' : 'Save Structure'}
                       </button>
                     </div>
-                  </div>
-
-                  {saveError && <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{saveError}</div>}
-
-                  <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-800">
-                    Create the program first, then manually add outcomes, outputs, activities, and budget lines below.
-                  </div>
-
-                  <div className="space-y-3">
-                    {selectedProgram.outcomes.map((outcome) => (
-                      <div key={outcome.id} className="rounded-lg border border-slate-200 p-3">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <input className="input" value={outcome.name} onChange={(event) => renameOutcome(outcome.id, event.target.value)} />
-                          <button type="button" className="btn btn-sm btn-light" onClick={() => addOutput(outcome.id)}>
-                            Add Output
-                          </button>
-                          <button type="button" className="btn btn-sm btn-light" onClick={() => removeOutcome(outcome.id)}>
-                            Remove
-                          </button>
-                        </div>
-
-                        <div className="mt-2 space-y-2 pl-2 border-l border-slate-200">
-                          {outcome.outputs.map((output) => (
-                            <div key={output.id} className="rounded border border-slate-100 bg-slate-50 p-2">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <input className="input" value={output.name} onChange={(event) => renameOutput(outcome.id, output.id, event.target.value)} />
-                                <button type="button" className="btn btn-sm btn-light" onClick={() => addActivity(outcome.id, output.id)}>
-                                  Add Activity
-                                </button>
-                                <button type="button" className="btn btn-sm btn-light" onClick={() => removeOutput(outcome.id, output.id)}>
-                                  Remove
-                                </button>
-                              </div>
-
-                              <div className="mt-2 space-y-2 pl-2 border-l border-slate-200">
-                                {output.activities.map((activity) => (
-                                  <div key={activity.id} className="rounded border border-slate-200 bg-white p-2">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <input className="input" value={activity.name} onChange={(event) => renameActivity(outcome.id, output.id, activity.id, event.target.value)} />
-                                      <button type="button" className="btn btn-sm btn-light" onClick={() => addBudgetLine(outcome.id, output.id, activity.id)}>
-                                        Add Budget Line
-                                      </button>
-                                      <button type="button" className="btn btn-sm btn-light" onClick={() => removeActivity(outcome.id, output.id, activity.id)}>
-                                        Remove
-                                      </button>
-                                    </div>
-
-                                    <div className="mt-2 space-y-2 pl-2 border-l border-slate-200">
-                                      {activity.budgetLines.map((budgetLine) => (
-                                        <div key={budgetLine.id} className="rounded border border-slate-200 bg-white p-2">
-                                          <div className="flex flex-wrap items-center justify-between gap-2">
-                                            <div>
-                                              <p className="text-sm font-medium text-slate-900">{budgetLine.name}</p>
-                                              <p className="text-xs text-slate-500">
-                                                {budgetLine.quantity} x {budgetLine.frequency} x {formatMoney(budgetLine.unitPrice)} x {budgetLine.units}
-                                              </p>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                              <span className="text-sm font-semibold text-slate-900">{formatMoney(budgetLine.totalAmount)}</span>
-                                              <button type="button" className="btn btn-sm btn-light" onClick={() => openBudgetLineSheet(outcome.id, output.id, activity.id, budgetLine.id)}>
-                                                Edit
-                                              </button>
-                                              <button type="button" className="btn btn-sm btn-light" onClick={() => removeBudgetLine(outcome.id, output.id, activity.id, budgetLine.id)}>
-                                                Remove
-                                              </button>
-                                            </div>
-                                          </div>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
                 </>
               )}
             </section>
@@ -704,15 +895,15 @@ export const ProjectsPage = () => {
         </DialogContent>
       </Dialog>
 
-      <Sheet open={budgetSheetOpen} onOpenChange={setBudgetSheetOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-xl p-0 overflow-y-auto">
+      <Dialog open={budgetSheetOpen} onOpenChange={setBudgetSheetOpen}>
+        <DialogContent className="sm:max-w-xl p-0 overflow-y-auto max-h-[90vh]">
           <div className="p-6 border-b bg-slate-50/50">
-            <SheetHeader>
-              <SheetTitle className="text-2xl font-bold text-slate-900">Budget Line Input</SheetTitle>
-              <SheetDescription>
+            <DialogHeader>
+              <DialogTitle className="text-2xl font-bold text-slate-900">Budget Line Input</DialogTitle>
+              <DialogDescription>
                 Enter quantity, frequency, unit price, and units. The total is calculated automatically.
-              </SheetDescription>
-            </SheetHeader>
+              </DialogDescription>
+            </DialogHeader>
           </div>
 
           <div className="p-6 space-y-4">
@@ -766,9 +957,6 @@ export const ProjectsPage = () => {
                     <label className="form-label text-slate-900">Units</label>
                     <input
                       className="input"
-                      type="number"
-                      min={0}
-                      step="any"
                       value={budgetDraft.units}
                       onChange={(event) => setBudgetDraft((current) => current ? { ...current, units: event.target.value } : current)}
                     />
@@ -791,8 +979,8 @@ export const ProjectsPage = () => {
               </>
             )}
           </div>
-        </SheetContent>
-      </Sheet>
+        </DialogContent>
+      </Dialog>
     </Container>
   );
 };

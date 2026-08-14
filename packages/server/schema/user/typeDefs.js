@@ -6,7 +6,7 @@ const userTypeDefs = `#graphql
         id: ID!
         username: String!
         name: String!
-        staff_number: String!
+        # staff_number: String!
         email: String
         district: String!
         phone_number: String
@@ -25,7 +25,7 @@ const userTypeDefs = `#graphql
         id: ID,
         username: String!
         name: String!
-        company_initials: String!
+        # company_initials: String!
         email: String!
         district: String!
         premises_location: String!
@@ -39,7 +39,7 @@ const userTypeDefs = `#graphql
      input RegisterInput {
         username: String!
         name: String!
-        company_initials: String!
+        # company_initials: String!
         premises_location: String!
         phone_number: String
         password: String!
@@ -66,7 +66,7 @@ const userTypeDefs = `#graphql
         phone_number: String
         district: String
         premises_location: String
-        company_initials: String
+        # company_initials: String
         password: String
     }
 
@@ -74,8 +74,6 @@ const userTypeDefs = `#graphql
     type Query {
         users(limit: Int, offset: Int, search: String, roleName: String, district: String): [User!]!
         usersCount(search: String, roleName: String, district: String): Int!
-        duAgents(limit: Int, offset: Int, search: String, district: String): [User!]!
-        duAgentsCount(search: String, district: String): Int!
         user(id: ID!): User
         currentUser: User
         me: User

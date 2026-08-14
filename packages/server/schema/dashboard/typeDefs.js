@@ -1,77 +1,141 @@
 const dashboardTypeDefs = `#graphql
-  input DashboardFiltersInput {
-    district: String
-    gender: String
-    disability: String
-    date_from: String
-    date_to: String
-    top_limit: Int
+  type RequisitionStatusSummary {
+    totalRequisitions: Int!
+    pendingRequisitions: Int!
+    directorRequisitions: Int!
+    approvedRequisitions: Int!
+    rejectedRequisitions: Int!
+    haltedRequisitions: Int!
+    pendingAccountabilityNames: [String!]!
+    totalAmountRequested: Float!
+    totalAmountRequestedFormatted: String!
+    accountabilitiesThisMonth: Int!
+    closedAccountabilitiesThisMonth: Int!
   }
 
-  type DashboardFiltersApplied {
-    district: String
-    gender: String
-    disability: String
-    date_from: String
-    date_to: String
-    top_limit: Int!
-  }
-
-  type DashboardKpis {
-    total_pwds: Int!
-    total_district_unions: Int!
-    total_national_opds: Int!
-    total_service_providers: Int!
-    verified_pwds: Int!
-    unverified_pwds: Int!
-    districts_with_pwds: Int!
-    jobs: Int!
-    products: Int!
-    innovations: Int!
-  }
-
-  type DashboardSeriesItem {
-    label: String!
-    value: Int!
-  }
-
-  type DashboardAgeGenderItem {
-    bucket: String!
-    male: Int!
-    female: Int!
+  type RequisitionStatusChart {
     total: Int!
+    pendingCount: Int!
+    approvedCount: Int!
+    rejectedCount: Int!
+    requireAmendmentCount: Int!
+    amendedCount: Int!
+    acceptedCount: Int!
   }
 
-  type DashboardMonthlyItem {
-    month: String!
-    value: Int!
+  type ActivityAmount {
+    label: String!
+    value: Float!
   }
 
-  type DashboardStats {
-    generated_at: String!
-    filters: DashboardFiltersApplied!
-    kpis: DashboardKpis!
-    gender_distribution: [DashboardSeriesItem!]!
-    age_gender_distribution: [DashboardAgeGenderItem!]!
-    disability_breakdown: [DashboardSeriesItem!]!
-    monthly_registrations: [DashboardMonthlyItem!]!
-    district_breakdown: [DashboardSeriesItem!]!
-    
+  type ActivityRequisitionData {
+    chartData: [ActivityAmount!]!
+    programs: [Program!]!
   }
 
-  type LandingPageStats {
-    gender_distribution: [DashboardSeriesItem!]!
-    age_gender_distribution: [DashboardAgeGenderItem!]!
-    disability_breakdown: [DashboardSeriesItem!]!
-    monthly_registrations: [DashboardMonthlyItem!]!
-    district_breakdown: [DashboardSeriesItem!]!
-    
+  type AccountabilitySubmissionProgress {
+    submittedPercent: Float!
+    pendingPercent: Float!
+    pendingCount: Int!
+    haltedCount: Int!
+    acceptedCount: Int!
   }
+
+  type ProgramBudgetSummary {
+    usedPercent: Float
+    balancePercent: Float
+    budget: Float
+    used: Float
+    programs: [Program!]!
+  }
+
+  type MonthlyExpense {
+    month: Int!
+    totalAmount: Float!
+  }
+
+  type BudgetComparisonItem {
+    activityName: String!
+    outputName: String!
+    outcomeName: String!
+    budget: Float!
+    amountUsed: Float!
+  }
+
+  type BudgetComparisonData {
+    chartData: [BudgetComparisonItem!]!
+    programs: [Program!]!
+  }
+
+  type BudgetUtilizationNode {
+    name: String!
+    utilization: Float!
+    budgetAmount: Float!
+    parentBudget: Float!
+    level: Int!
+  }
+
+  type ProgramHierarchyActivity {
+    name: String!
+    budgetAmount: Float!
+    utilization: Float!
+  }
+
+  type ProgramHierarchyOutput {
+    name: String!
+    budgetAmount: Float!
+    utilization: Float!
+    activities: [ProgramHierarchyActivity!]!
+  }
+
+  type ProgramHierarchyOutcome {
+    name: String!
+    budgetAmount: Float!
+    utilization: Float!
+    outputs: [ProgramHierarchyOutput!]!
+  }
+
+  type ProgramHierarchy {
+    programName: String!
+    programBudget: Float
+    outcomes: [ProgramHierarchyOutcome!]!
+  }
+
+  type AccountabilityStatusBreakdown {
+  closedPercent: Float!
+  pendingPercent: Float!
+  haltedPercent: Float!
+}
+
+type RecentAccountability {
+  id: ID!
+  requisitionNo: String!
+  reportDate: String!
+  totalAccountedAmount: Float!
+  assignedAmount: Float!
+  varianceAmount: Float!
+  overBudget: Boolean!
+}
+
+type AccountabilityHighlights {
+  totalAccountedAmount: Float!
+  totalAccountedAmountFormatted: String!
+  percentChange: Float
+  statusBreakdown: AccountabilityStatusBreakdown!
+  recent: [RecentAccountability!]!
+}
 
   type Query {
-    dashboardStats(filters: DashboardFiltersInput): DashboardStats!
-    landingPageStats: LandingPageStats!
-    publicPwdCount: Int!
+    requisitionStatusSummary: RequisitionStatusSummary! 
+    requisitionStatusChart: RequisitionStatusChart!
+    activityRequisitionData(programId: ID): ActivityRequisitionData!
+    accountabilitySubmissionProgress: AccountabilitySubmissionProgress!
+    programBudgetSummary(programId: ID): ProgramBudgetSummary!
+    yearExpense(year: Int!): [MonthlyExpense!]!
+    budgetComparisonData(programId: ID): BudgetComparisonData!
+    budgetUtilization: [BudgetUtilizationNode!]!
+    programHierarchy(programId: ID!): ProgramHierarchy!
+    accountabilityHighlights(limit: Int): AccountabilityHighlights!
   }
 `;
 

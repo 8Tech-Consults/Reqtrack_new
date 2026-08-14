@@ -90,7 +90,7 @@ const Login = () => {
         <div className="space-y-4">
           <div className="inline-flex items-center gap-3">
             <img
-              src={toAbsoluteUrl('/media/app/mini-logo.svg')}
+              src={toAbsoluteUrl('/media/logo/logo.png')}
               className="h-8 w-auto"
               alt="NAD Requisition"
             />

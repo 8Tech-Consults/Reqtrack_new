@@ -1,10 +1,13 @@
 import { Fragment } from 'react';
 
 import { toAbsoluteUrl } from '@/utils/Assets';
+import { useQuery } from '@apollo/client/react';
+import { REQUISITIONSTATISSUMMARY } from '@/gql/dashboard';
+import { KeenIcon } from '@/components';
 
 interface IChannelStatsItem {
-  logo: string;
-  logoDark?: string;
+  icon: string;
+  color: 'warning' | 'info' | 'primary' | 'success';
   info: string;
   desc: string;
   path: string;
@@ -12,45 +15,51 @@ interface IChannelStatsItem {
 interface IChannelStatsItems extends Array<IChannelStatsItem> {}
 
 const ChannelStats = () => {
+  const { data, loading, error } = useQuery(REQUISITIONSTATISSUMMARY);
+
+  const summary = data?.requisitionStatusSummary;
+
   const items: IChannelStatsItems = [
-    { logo: 'linkedin-2.svg', info: '9.3k', desc: 'Amazing mates', path: '' },
-    { logo: 'youtube-2.svg', info: '24k', desc: 'Lessons Views', path: '' },
-    { logo: 'instagram-03.svg', info: '608', desc: 'New subscribers', path: '' },
     {
-      logo: 'tiktok.svg',
-      logoDark: 'tiktok-dark.svg',
-      info: '2.5k',
-      desc: 'Stream audience',
-      path: ''
-    }
+      icon: 'dollar',
+      color: 'warning',
+      info: loading ? '—' : String(summary?.pendingRequisitions ?? 0),
+      desc: 'Requisitions pending Finance approval',
+      path: '',
+    },
+    {
+      icon: 'verify',
+      color: 'info',
+      info: loading ? '—' : String(summary?.directorRequisitions ?? 0),
+      desc: `Requisitions pending Director's approval`,
+      path: '',
+    },
+    {
+      icon: 'document',
+      color: 'primary',
+      info: loading ? '—' : String(summary?.pendingAccountabilityNames?.length ?? 0),
+      desc: 'Pending Accountabilities',
+      path: '',
+    },
+    {
+      icon: 'wallet',
+      color: 'success',
+      info: loading ? '—' : (summary?.totalAmountRequestedFormatted ?? '0'),
+      desc: 'Total Funds Disbursed this year',
+      path: '',
+    },
   ];
 
   const renderItem = (item: IChannelStatsItem, index: number) => {
     return (
       <div
         key={index}
-        className="card flex-col justify-between gap-6 h-full bg-cover rtl:bg-[left_top_-1.7rem] bg-[right_top_-1.7rem] bg-no-repeat channel-stats-bg"
+        // className="card flex-col justify-between gap-6 h-full bg-cover rtl:bg-[left_top_-1.7rem] bg-[right_top_-1.7rem] bg-no-repeat channel-stats-bg"
+        className="card flex-col justify-between gap-6 h-full bg-cover "
       >
-        {item.logoDark ? (
-          <>
-            <img
-              src={toAbsoluteUrl(`/media/brand-logos/${item.logo}`)}
-              className="dark:hidden w-7 mt-4 ms-5"
-              alt=""
-            />
-            <img
-              src={toAbsoluteUrl(`/media/brand-logos/${item.logoDark}`)}
-              className="light:hidden w-7 mt-4 ms-5"
-              alt=""
-            />
-          </>
-        ) : (
-          <img
-            src={toAbsoluteUrl(`/media/brand-logos/${item.logo}`)}
-            className="w-7 mt-4 ms-5"
-            alt=""
-          />
-        )}
+        <div className={`flex items-center justify-center rounded-full size-11 mt-4 ms-5 bg-${item.color}-light`}>
+          <KeenIcon icon={item.icon} className={`text-${item.color} text-xl`} />
+        </div>
 
         <div className="flex flex-col gap-1 pb-4 px-5">
           <span className="text-3xl font-semibold text-gray-900">{item.info}</span>
@@ -59,6 +68,10 @@ const ChannelStats = () => {
       </div>
     );
   };
+
+  if (error) {
+    return <p className="text-sm text-red-600">Couldn't load dashboard stats. {error.message}</p>;
+  }
 
   return (
     <Fragment>
@@ -73,9 +86,7 @@ const ChannelStats = () => {
         `}
       </style>
 
-      {items.map((item, index) => {
-        return renderItem(item, index);
-      })}
+      {items.map((item, index) => renderItem(item, index))}
     </Fragment>
   );
 };

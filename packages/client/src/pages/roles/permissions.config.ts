@@ -1,4 +1,4 @@
-import { Route, ShieldCheck, Briefcase, FileText } from "lucide-react";
+import { Route, ShieldCheck, Briefcase, FileText, User, Users } from "lucide-react";
 
 export type PermissionItem = {
   id: string;
@@ -74,4 +74,16 @@ export const MODULES_CONFIG: ModuleConfig[] = [
       { id: "can_approve_accountabilities", label: "Can Approve Accountabilities" },
     ],
   },
+  {
+    id: "staff",
+    name: "Staff Management",
+    icon: Users,
+    permissions: [
+      { id: "can_manage_staff", label: "Can Manage Staff" },
+      { id: "can_view_staff", label: "Can View Staff" },
+      { id: "can_create_staff", label: "Can Create Staff" },
+      { id: "can_edit_staff", label: "Can Edit Staff" },
+      { id: "can_delete_staff", label: "Can Delete Staff" },
+    ],
+  }
 ];

@@ -14,7 +14,7 @@ import {
   TDataGridRequestParams,
 } from '@/components';
 import { ColumnDef } from '@tanstack/react-table';
-import { useApolloClient, useMutation } from '@apollo/client/react';
+import { useApolloClient, useMutation, useQuery } from '@apollo/client/react';
 import {
   GET_REQUISITIONS,
   SAVE_REQUISITION,
@@ -81,11 +81,9 @@ const RequisitionsList = ({
   onExportReady?: (fn: () => void, state: { loading: boolean }) => void;
   canEdit?: boolean;
 }) => {
-  const client = useApolloClient();
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [currentPageData, setCurrentPageData] = useState<RequisitionRecord[]>([]);
-  const [fetching, setFetching] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -98,8 +96,37 @@ const RequisitionsList = ({
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  // Single mutation shared by both the "New Requisition" (create) sheet and
-  // the "Edit" sheet — one handler, keyed off whether an id is present.
+  // Declarative query — runs on mount and whenever `variables` change.
+  // `refetch` gives us an imperative, Promise-returning escape hatch for
+  // the DataGrid's pagination callback, without abandoning useQuery.
+  const {
+    data: requisitionsData,
+    loading: fetching,
+    error: queryError,
+    refetch,
+  } = useQuery(GET_REQUISITIONS, {
+    variables: {
+      limit: pageSize,
+      offset: 0,
+      search: debouncedSearch || undefined,
+    },
+    fetchPolicy: 'network-only',
+    notifyOnNetworkStatusChange: true,
+  });
+
+  // Keep local mirrors in sync whenever Apollo's cache/query state changes
+  // (e.g. from the initial mount, or from refetchQueries after a save/delete).
+  useEffect(() => {
+    if (queryError) {
+      setCurrentPageData([]);
+      setFetchError(toFriendlyErrorMessage(queryError, 'We could not load requisitions. Please try again.'));
+      return;
+    }
+    const items = requisitionsData?.requisitions || [];
+    setCurrentPageData(items);
+    setFetchError(null);
+  }, [requisitionsData, queryError]);
+
   const [saveRequisition] = useMutation(SAVE_REQUISITION, {
     awaitRefetchQueries: true,
     refetchQueries: [
@@ -157,28 +184,25 @@ const RequisitionsList = ({
     [saveRequisition, onCreateOpenChange]
   );
 
-  const fetchRequisitions = useCallback(
-    async ({ pageIndex, pageSize }: TDataGridRequestParams) => {
-      setFetching(true);
-
+  // Bridges the DataGrid's imperative pagination contract onto refetch().
+  // Still hits the network via useQuery's own client instance — no separate
+  // client.query() call, no useQuery-inside-a-callback violation.
+  const fetchRequisitionsPage = useCallback(
+    async ({ pageIndex, pageSize: gridPageSize }: TDataGridRequestParams) => {
       try {
-        const response = await client.query<{ requisitions?: RequisitionRecord[] }>({
-          query: GET_REQUISITIONS,
-          variables: {
-            limit: pageSize,
-            offset: pageIndex * pageSize,
-            search: debouncedSearch || undefined,
-          },
-          fetchPolicy: 'network-only',
+        const { data } = await refetch({
+          limit: gridPageSize,
+          offset: pageIndex * gridPageSize,
+          search: debouncedSearch || undefined,
         });
 
-        const items = response?.data?.requisitions || [];
+        const items = data?.requisitions || [];
         setCurrentPageData(items);
         setFetchError(null);
 
         return {
           data: items,
-          totalCount: pageIndex * pageSize + items.length + (items.length === pageSize ? 1 : 0),
+          totalCount: pageIndex * gridPageSize + items.length + (items.length === gridPageSize ? 1 : 0),
         };
       } catch (error: any) {
         setCurrentPageData([]);
@@ -188,13 +212,12 @@ const RequisitionsList = ({
           data: [],
           totalCount: 0,
         };
-      } finally {
-        setFetching(false);
       }
     },
-    [client, debouncedSearch, refreshKey]
+    [refetch, debouncedSearch]
   );
 
+  // ... deleteRequisition, updateStatus, handleStatusChange, handleExport unchanged ...
   const [deleteRequisition, { loading: deleting }] = useMutation(DELETE_REQUISITION, {
     onCompleted: () => {
       toast.success('Requisition deleted successfully');
@@ -408,20 +431,20 @@ const RequisitionsList = ({
       </div>
 
       <DataGrid
-        key={`${refreshKey}-${debouncedSearch}`}
-        columns={columns}
-        data={data}
-        serverSide={true}
-        onFetchData={fetchRequisitions}
-        pagination={{ size: pageSize, sizes: [10, 20, 50] }}
-        messages={{
-          empty: fetchError
-            ? 'Failed to load requisitions'
-            : debouncedSearch
-              ? 'No requisitions match your search.'
-              : 'No requisitions available.',
-        }}
-      />
+  key={`${refreshKey}-${debouncedSearch}`}
+  columns={columns}
+  data={data}
+  serverSide={true}
+  onFetchData={fetchRequisitionsPage}
+  pagination={{ size: pageSize, sizes: [10, 20, 50] }}
+  messages={{
+    empty: fetchError
+      ? 'Failed to load requisitions'
+      : debouncedSearch
+        ? 'No requisitions match your search.'
+        : 'No requisitions available.',
+  }}
+/>
 
       <RequisitionFormSheet
         open={createOpen}

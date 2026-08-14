@@ -72,7 +72,7 @@ export function AccountabilityForm({ requisitionId, requisitionItems, existing, 
   const [summary, setSummary] = useState(existing?.summary ?? '');
   const [status, setStatus] = useState<AccountabilityStatus>(existing?.status ?? 'Draft');
   const [items, setItems] = useState<AccountabilityItemInput[]>(
-    existing?.items.length
+    existing?.items?.length
       ? existing.items.map((it) => ({
           id: it.id,
           accountedAmount: it.accountedAmount,

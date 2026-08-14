@@ -22,7 +22,7 @@ const saveData = async ({ table, id, data, idColumn = "id", connection }) => {
       const results = await Promise.all(promises);
 
       return data.map((row, index) =>
-        Object.prototype.hasOwnProperty.call(row, idColumn)
+        Object.prototype.hasOwnProperty.call(row, idColumn) && row[idColumn] != null
           ? row[idColumn]
           : results[index][0].insertId
       );
@@ -57,7 +57,7 @@ const saveData = async ({ table, id, data, idColumn = "id", connection }) => {
 
       const [results] = await conn.execute(sql, values);
 
-      if (Object.prototype.hasOwnProperty.call(data, idColumn)) {
+      if (Object.prototype.hasOwnProperty.call(data, idColumn) && data[idColumn] != null) {
         return data[idColumn];
       }
       return results.insertId;

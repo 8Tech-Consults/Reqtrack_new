@@ -19,7 +19,7 @@ const DefaultPage = () => {
   } else if (currentLayout?.name === 'demo7-layout') {
     return <Demo2Page />;
   } else if (currentLayout?.name === 'demo8-layout') {
-    return <Demo4Page />;
+    return <Demo1LightSidebarPage />;
   } else if (currentLayout?.name === 'demo9-layout') {
     return <Demo2Page />;
   } else if (currentLayout?.name === 'demo10-layout') {

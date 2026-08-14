@@ -85,6 +85,7 @@ import { ProjectsPage } from '@/pages/projects/ProjectsPage';
 import { RolesListPage } from '@/pages/roles/RolesListPage';
 import { UsersListPage } from '@/pages/users/UsersListPage';
 import { RequisitionsListPage } from '@/pages/requisitions';
+import { StaffsListPage } from '@/pages/staff';
 // import { AccountabilitiesPage } from '@/pages/accountabilities/AccountabilitiesPage';
 
 const AppRoutingSetup = (): ReactElement => {
@@ -93,12 +94,14 @@ const AppRoutingSetup = (): ReactElement => {
       <Route element={<RequireAuth />}>
         <Route element={<Demo8Layout />}>
         
-          <Route path="/" element={<DefaultPage />} />
+          <Route path="/dashboard" element={<DefaultPage />} />
           <Route path="/projects" element={<ProjectsPage />} />
           <Route path="/requisitions" element={<RequisitionsListPage />} />
 
           <Route path="/settings/roles" element={<RolesListPage />} />
           <Route path="/settings/users" element={<UsersListPage />} />
+
+          <Route path="/staff" element={<StaffsListPage />} />
 
 
           {/* <Route path="/accountabilities" element={<AccountabilitiesPage />} /> */}
