@@ -5,6 +5,8 @@ import { db } from '../../config/config.js';
 import { getUsers } from '../user/resolvers.js';
 import { fetchPrograms } from '../programs/resolvers.js';
 import saveUpload from '../../helpers/saveUpload.js';
+import checkPermission from '../../helpers/checkPermission.js';
+import hasPermission from '../../helpers/hasPermission.js';
 
 const toNumber = (value, fallback = 0) => {
   const parsed = Number(value);
@@ -54,10 +56,20 @@ const fetchRequisitionItems = async (requisitionId) => {
   return rows.map(mapRequisitionItem);
 };
 
-const getRequisitions = async ({ limit, offset, search }) => {
+const getRequisitions = async ({ limit, offset, search, userId, canApproveRequisitions }) => {
   const trimmed = search ? String(search).trim() : null;
   const values = [];
   let where = 'WHERE r.deleted = 0';
+
+  if (canApproveRequisitions) {
+    where += ' AND r.status IN (?, ?)';
+    values.push('Approved', 'Accepted');
+  }
+
+   if (userId) {
+    where += " AND r.requested_by = ?";
+    values.push(userId);
+  }
 
   if (trimmed) {
     where += ' AND (r.title LIKE ? OR r.requisition_no LIKE ? OR r.status LIKE ?)';
@@ -89,9 +101,39 @@ const getNextRequisitionNo = async () => {
 const requisitionResolvers = {
   JSON: JSONResolver,
   Query: {
-    requisitions: async (_parent, args) => {
+    requisitions: async (_parent, args, context) => {
       const { limit, offset, search } = args;
-      return await getRequisitions({ limit, offset, search });
+      const userPermissions = context.req.user.permissions;
+      const user_id = context.req.user.id;
+
+      checkPermission(
+        userPermissions,
+        "can_view_requisitions",
+        "You dont have permissions to view requisitions"
+      );
+
+      const canViewRequisitions = hasPermission(
+        userPermissions,
+        "can_view_own_requisitions"
+      );
+
+      const canAcceptRequisitions = hasPermission(
+        userPermissions,
+        "can_accept_requisitions"
+      );
+      const canApproveRequisitions = hasPermission(
+        userPermissions,
+        "can_approve_requisitions"
+      );
+      
+      return await getRequisitions({ 
+        limit, 
+        offset, 
+        search,
+        userId : canViewRequisitions ? user_id : null,
+        canApproveRequisitions
+      });
+
     },
     requisition: async (_parent, { id }) => {
       const [[row]] = await db.execute(

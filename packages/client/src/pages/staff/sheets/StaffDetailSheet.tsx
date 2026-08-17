@@ -1,5 +1,6 @@
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { User, Briefcase, Phone, Banknote, Users, Paperclip } from 'lucide-react';
+import { URL_2 } from '@/config/urls';
 import { StaffRecord, formatDate, parseNextOfKin } from '../blocks/StaffList';
 
 type Props = {
@@ -12,6 +13,29 @@ const Field = ({ label, value }: { label: string; value?: string | null }) => (
   <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
     <p className="text-xs text-slate-500">{label}</p>
     <p className="font-medium text-slate-900 mt-0.5">{value || '—'}</p>
+  </div>
+);
+
+const FileFieldView = ({ label, filename }: { label: string; filename?: string | null }) => (
+  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+    <p className="text-xs text-slate-500 mb-1.5">{label}</p>
+    {filename ? (
+      <a
+        href={`${URL_2}/staff/${filename}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center gap-2 group"
+      >
+        <img
+          src={`${URL_2}/staff/${filename}`}
+          alt={label}
+          className="h-12 w-12 rounded object-cover border border-slate-200"
+        />
+        <span className="text-sm text-blue-600 group-hover:underline">View full size</span>
+      </a>
+    ) : (
+      <p className="font-medium text-slate-900">—</p>
+    )}
   </div>
 );
 
@@ -131,8 +155,8 @@ const StaffDetailSheet = ({ open, onOpenChange, detailRow }: Props) => {
               <h3 className="text-sm font-semibold text-slate-800">Attachments</h3>
             </div>
             <div className="grid sm:grid-cols-2 gap-3 text-sm">
-              <Field label="Profile Picture" value={detailRow.profile_picture} />
-              <Field label="Signature" value={detailRow.signature} />
+              <FileFieldView label="Profile Picture" filename={detailRow.profile_picture} />
+              <FileFieldView label="Signature" filename={detailRow.signature} />
             </div>
           </section>
         </div>

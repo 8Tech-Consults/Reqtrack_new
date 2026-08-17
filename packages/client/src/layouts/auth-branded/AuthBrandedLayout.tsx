@@ -16,7 +16,7 @@ const Layout = () => {
             background-image:
               radial-gradient(circle at 18% 18%, rgba(255, 255, 255, 0.18), transparent 28%),
               linear-gradient(145deg, rgba(37, 99, 235, 0.96) 0%, rgba(59, 130, 246, 0.94) 48%, rgba(29, 78, 216, 0.96) 100%),
-              url('${toAbsoluteUrl('/media/images/2600x1600/1.png')}');
+              url('${toAbsoluteUrl('/media/images/image1.jpg')}');
             background-size: cover;
             background-position: center;
           }
@@ -24,7 +24,7 @@ const Layout = () => {
             background-image:
               radial-gradient(circle at 18% 18%, rgba(255, 255, 255, 0.12), transparent 28%),
               linear-gradient(145deg, rgba(15, 23, 42, 0.96) 0%, rgba(30, 41, 59, 0.94) 48%, rgba(30, 64, 175, 0.96) 100%),
-              url('${toAbsoluteUrl('/media/images/2600x1600/1-dark.png')}');
+              url('${toAbsoluteUrl('/media/images/image1.jpg')}');
             background-size: cover;
             background-position: center;
           }
@@ -37,8 +37,8 @@ const Layout = () => {
           <div className="relative flex h-full flex-col justify-between p-8 lg:p-14 text-white">
             <Link to="/" className="inline-flex items-center gap-3 w-fit">
               <img
-                src={toAbsoluteUrl('/media/app/mini-logo.svg')}
-                className="h-[34px] max-w-none brightness-0 invert"
+                src={toAbsoluteUrl('/media/logos/logo.png')}
+                className="h-[100px] w-[100px] brightness-0 invert"
                 alt="NAD Requisition"
               />
             </Link>

@@ -62,7 +62,7 @@ function FileLink({ label, name, baseUrl }: { label: string; name: string | null
     <div>
       <p className="text-xs font-medium text-slate-500">{label}</p>
       <a
-        href={`${baseUrl}/accountabilities/${name}`}
+        href={`${baseUrl}/accountability_docs/${name}`}
         target="_blank"
         rel="noopener noreferrer"
         className="text-sm font-medium text-blue-600 hover:underline"

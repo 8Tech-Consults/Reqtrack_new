@@ -84,7 +84,7 @@ import {
 import { ProjectsPage } from '@/pages/projects/ProjectsPage';
 import { RolesListPage } from '@/pages/roles/RolesListPage';
 import { UsersListPage } from '@/pages/users/UsersListPage';
-import { RequisitionsListPage } from '@/pages/requisitions';
+import { RequisitionsListPage, AccountabilityPage } from '@/pages/requisitions';
 import { StaffsListPage } from '@/pages/staff';
 // import { AccountabilitiesPage } from '@/pages/accountabilities/AccountabilitiesPage';
 
@@ -97,6 +97,7 @@ const AppRoutingSetup = (): ReactElement => {
           <Route path="/dashboard" element={<DefaultPage />} />
           <Route path="/projects" element={<ProjectsPage />} />
           <Route path="/requisitions" element={<RequisitionsListPage />} />
+          <Route path="/requisitions/:id/accountability" element={<AccountabilityPage />} />
 
           <Route path="/settings/roles" element={<RolesListPage />} />
           <Route path="/settings/users" element={<UsersListPage />} />

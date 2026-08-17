@@ -17,7 +17,8 @@ const userTypeDefs = `#graphql
         created_at: DateTime!
         updated_at: DateTime!
         must_change_password: Boolean
-        
+        staffDetails: Staff
+
     }
 
 

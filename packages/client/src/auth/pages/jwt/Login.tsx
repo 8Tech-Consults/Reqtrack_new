@@ -87,14 +87,15 @@ const Login = () => {
         onSubmit={formik.handleSubmit}
         noValidate
       >
-        <div className="space-y-4">
-          <div className="inline-flex items-center gap-3">
+        <div className="space-y-4 ">
+          <div className="inline-flex items-center">
+           
             <img
-              src={toAbsoluteUrl('/media/logo/logo.png')}
-              className="h-8 w-auto"
-              alt="NAD Requisition"
-            />
-            <span className="text-base font-semibold text-slate-500">Logo</span>
+                src={toAbsoluteUrl('/media/logos/logo.png')}
+                className="h-[100px] w-[100px]"
+                alt="NAD Requisition"
+              />
+            
           </div>
 
           <div className="space-y-2">

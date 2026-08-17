@@ -23,6 +23,15 @@ const requisitionsTypeDefs = `#graphql
     actualAmount: Float!
   }
 
+  enum RequisitionStatus {
+    Pending
+    Approved
+    Rejected
+    AmendmentRequested
+    Accepted
+    Amended
+  }
+
   type RequisitionItem {
     id: ID!
     budgetLineId: ID

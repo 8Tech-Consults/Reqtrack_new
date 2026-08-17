@@ -33,6 +33,9 @@ export const GET_REQUISITIONS = gql`
       id
       email
       name
+      staffDetails {
+        signature
+      }
     }
     program {
       id

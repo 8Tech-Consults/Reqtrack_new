@@ -2,6 +2,8 @@ import { GraphQLError } from 'graphql';
 import { JSONResolver } from 'graphql-scalars';
 import saveData from '../../utils/db/saveData.js';
 import { db } from '../../config/config.js';
+import checkPermission from '../../helpers/checkPermission.js';
+import hasPermission from '../../helpers/hasPermission.js';
 
 const mapProgramNode = (row) => ({
   id: String(row.id),
@@ -104,75 +106,20 @@ const buildStructure = async (programIds) => {
   }, {});
 };
 
-const syncStructureLevel = async ({ connection, table, parentColumn, parentId, items }) => {
-  const [existingRows] = await connection.execute(
-    `SELECT * FROM ${table} WHERE ${parentColumn} = ?`,
-    [parentId]
-  );
 
-  const existingById = new Map(existingRows.map((row) => [String(row.id), row]));
-  const keptIds = [];
-
-  for (const [index, item] of items.entries()) {
-    const rawId = item?.id ? String(item.id) : null;
-    const existing = rawId ? existingById.get(rawId) : null;
-    const name = String(item?.name || '').trim();
-    if (!name) {
-      throw new GraphQLError('Structure labels are required.', { extensions: { code: 'BAD_USER_INPUT' } });
-    }
-
-    const sortOrder = Number.isFinite(Number(item?.sortOrder)) ? Number(item.sortOrder) : index;
-    const quantity = Number.isFinite(Number(item?.quantity)) ? Number(item.quantity) : 1;
-    const frequency = Number.isFinite(Number(item?.frequency)) ? Number(item.frequency) : 1;
-    const unitPrice = Number.isFinite(Number(item?.unitPrice)) ? Number(item.unitPrice) : 0;
-    const units = String(item?.units || '').trim();
-    const totalAmount = Number.isFinite(Number(item?.totalAmount))
-      ? Number(item.totalAmount)
-      : quantity * frequency * unitPrice;
-
-    let resolvedId = rawId;
-    if (existing) {
-      await connection.execute(
-        `UPDATE ${table}
-         SET name = ?, quantity = ?, frequency = ?, unit_price = ?, units = ?, total_amount = ?, sort_order = ?, deleted = 0, updated_at = CURRENT_TIMESTAMP
-         WHERE id = ?`,
-        [name, quantity, frequency, unitPrice, units, totalAmount, sortOrder, resolvedId]
-      );
-    } else {
-      const [insertResult] = await connection.execute(
-        `INSERT INTO ${table} (${parentColumn}, name, quantity, frequency, unit_price, units, total_amount, sort_order, deleted)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)`,
-        [parentId, name, quantity, frequency, unitPrice, units, totalAmount, sortOrder]
-      );
-      resolvedId = String(insertResult.insertId);
-    }
-
-    keptIds.push(resolvedId);
-  }
-
-  for (const row of existingRows) {
-    const rowId = String(row.id);
-    if (!keptIds.includes(rowId) && Number(row.deleted) === 0) {
-      await connection.execute(
-        `UPDATE ${table}
-         SET deleted = 1, updated_at = CURRENT_TIMESTAMP
-         WHERE id = ?`,
-        [rowId]
-      );
-    }
-  }
-
-  return keptIds;
-};
-
-export const fetchPrograms = async ({id}) => {
+export const fetchPrograms = async ({id, programManager_id}) => {
   try {
     let values = [];
     let where = "WHERE p.deleted = 0";
-
+    
     if (id) {
       where += " AND p.id = ?";
       values.push(id);
+    }
+
+    if (programManager_id) {
+      where += " AND p.program_manager_id = ?";
+      values.push(programManager_id);
     }
 
     const [rows] = await db.execute(
@@ -225,7 +172,34 @@ const fetchProgramManagers = async () => {
 const programsResolvers = {
   JSON: JSONResolver,
   Query: {
-    programs: async () => fetchPrograms({id: null}),
+    programs: async (_parent, args, context) => {
+      const { limit, offset, search } = args;
+      const userPermissions = context.req.user.permissions;
+      const user_id = context.req.user.id;
+
+      checkPermission(
+        userPermissions,
+        "can_view_programs", 
+        "You dont have permissions to view programs"
+      );
+
+      const canViewOwnPrograms = hasPermission(
+        userPermissions,
+        "can_view_own_programs"
+      );
+
+      console.log(canViewOwnPrograms, user_id)
+
+      const canManageAllPrograms = hasPermission(
+        userPermissions,
+        "can_manage_programs"
+      );
+
+      return await fetchPrograms({
+        id: null,
+        programManager_id : canViewOwnPrograms? user_id: null
+      })
+    },
     programManagers: async () => fetchProgramManagers()
   },
   Mutation: {
@@ -253,7 +227,7 @@ const programsResolvers = {
         [data.name]
       );
 
-      if (existing && !input?.id) {
+      if (existing && String(existing.id) !== String(input?.id || '')) {
         throw new GraphQLError('A program with this name already exists.', {
           extensions: { code: 'BAD_USER_INPUT' }
         });
@@ -392,6 +366,43 @@ const programsResolvers = {
       } finally {
         connection.release();
       }
+    },
+    deleteProgram: async (_parent, { id }, context) => {
+      const userPermissions = context?.req?.user?.permissions;
+      checkPermission(
+        userPermissions,
+        'can_manage_programs',
+        "You don't have permission to delete programs."
+      );
+
+      const programId = String(id || '').trim();
+      if (!programId) {
+        throw new GraphQLError('Program is required.', { extensions: { code: 'BAD_USER_INPUT' } });
+      }
+
+      const [[program]] = await db.execute(
+        `SELECT id FROM programs WHERE id = ? AND deleted = 0 LIMIT 1`,
+        [programId]
+      );
+      if (!program) {
+        throw new GraphQLError('Program not found.', { extensions: { code: 'NOT_FOUND' } });
+      }
+
+      await saveData({
+        table: 'programs',
+        id: programId,
+        data: {
+          deleted: 1,
+          updated_by: context?.req?.user?.id || null,
+          updated_at: new Date()
+        }
+      });
+
+      return {
+        success: true,
+        message: 'Program deleted successfully.',
+        program: null
+      };
     }
   }
 };

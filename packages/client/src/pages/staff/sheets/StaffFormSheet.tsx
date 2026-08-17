@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
+import { Upload } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
+import { URL_2 } from '@/config/urls';
 import { NextOfKinInfo, StaffRecord, parseNextOfKin } from '../blocks/StaffList';
 
 type RoleOption = { id: string | number; name: string };
@@ -14,6 +16,45 @@ type Props = {
 };
 
 const MARITAL_STATUS_OPTIONS = ['Single', 'Married', 'Divorced', 'Widowed', 'Separated'];
+
+const FileField = ({
+  label,
+  file,
+  previewUrl,
+  existingName,
+  onChange,
+  required,
+}: {
+  label: string;
+  file: File | null;
+  previewUrl: string | null;
+  existingName?: string | null;
+  onChange: (file: File | null) => void;
+  required?: boolean;
+}) => (
+  <div>
+    <label className="label-text font-medium">{label}</label>
+    <div className="relative rounded-lg border border-dashed border-slate-300 p-3 text-center hover:bg-slate-50">
+      <input
+        type="file"
+        accept="image/*"
+        className="absolute inset-0 cursor-pointer opacity-0 z-0"
+        onChange={(e) => onChange(e.target.files?.[0] ?? null)}
+        required={required && !existingName}
+      />
+      <div className="relative z-10 flex flex-col items-center gap-1.5 pointer-events-none">
+        {previewUrl ? (
+          <img src={previewUrl} alt={label} className="h-16 w-16 rounded object-cover" />
+        ) : (
+          <Upload className="text-slate-400" size={18} />
+        )}
+        <span className="text-xs text-slate-600">
+          {file ? file.name : existingName ? 'Click to replace' : 'Click to upload'}
+        </span>
+      </div>
+    </div>
+  </div>
+);
 
 const StaffFormSheet = ({ open, onOpenChange, initialValues, onSave, saving, roleOptions }: Props) => {
   const isEdit = Boolean(initialValues?.id);
@@ -34,8 +75,22 @@ const StaffFormSheet = ({ open, onOpenChange, initialValues, onSave, saving, rol
   const [nssf, setNssf] = useState('');
   const [maritalStatus, setMaritalStatus] = useState('');
   const [nextOfKin, setNextOfKin] = useState<NextOfKinInfo>({});
-  const [profilePicture, setProfilePicture] = useState('');
-  const [signature, setSignature] = useState('');
+  const [profilePictureFile, setProfilePictureFile] = useState<File | null>(null);
+  const [profilePicturePreview, setProfilePicturePreview] = useState<string | null>(null);
+  const [existingProfilePicture, setExistingProfilePicture] = useState<string | null>(null);
+  const [signatureFile, setSignatureFile] = useState<File | null>(null);
+  const [signaturePreview, setSignaturePreview] = useState<string | null>(null);
+  const [existingSignature, setExistingSignature] = useState<string | null>(null);
+
+  const handleProfilePictureChange = (file: File | null) => {
+    setProfilePictureFile(file);
+    setProfilePicturePreview(file ? URL.createObjectURL(file) : null);
+  };
+
+  const handleSignatureChange = (file: File | null) => {
+    setSignatureFile(file);
+    setSignaturePreview(file ? URL.createObjectURL(file) : null);
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -55,14 +110,20 @@ const StaffFormSheet = ({ open, onOpenChange, initialValues, onSave, saving, rol
     setNssf(initialValues?.nssf || '');
     setMaritalStatus(initialValues?.marital_status || '');
     setNextOfKin(parseNextOfKin(initialValues?.next_of_kin));
-    setProfilePicture(initialValues?.profile_picture || '');
-    setSignature(initialValues?.signature || '');
+    setProfilePictureFile(null);
+    setProfilePicturePreview(
+      initialValues?.profile_picture ? `${URL_2}/staff/${initialValues.profile_picture}` : null
+    );
+    setExistingProfilePicture(initialValues?.profile_picture || null);
+    setSignatureFile(null);
+    setSignaturePreview(initialValues?.signature ? `${URL_2}/staff/${initialValues.signature}` : null);
+    setExistingSignature(initialValues?.signature || null);
   }, [open, initialValues]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (onSave) {
-      onSave({
+      const payload: Record<string, any> = {
         id: initialValues?.id || null,
         user_id: initialValues?.user_id || null,
         name,
@@ -81,9 +142,12 @@ const StaffFormSheet = ({ open, onOpenChange, initialValues, onSave, saving, rol
         nssf,
         marital_status: maritalStatus,
         next_of_kin: JSON.stringify(nextOfKin),
-        profile_picture: profilePicture,
-        signature,
-      });
+      };
+      // Only send a file when a new one was picked, so editing without
+      // touching these fields keeps the existing picture/signature intact.
+      if (profilePictureFile) payload.profile_picture = profilePictureFile;
+      if (signatureFile) payload.signature = signatureFile;
+      onSave(payload);
     }
   };
 
@@ -322,26 +386,22 @@ const StaffFormSheet = ({ open, onOpenChange, initialValues, onSave, saving, rol
           <section className="space-y-3">
             <h3 className="text-sm font-semibold text-slate-800 pb-1 border-b">Attachments</h3>
             <div className="grid md:grid-cols-2 gap-3">
-              <div>
-                <label className="label-text font-medium">Profile Picture (file name)</label>
-                <input
-                  className="input input-bordered w-full"
-                  value={profilePicture}
-                  onChange={(e) => setProfilePicture(e.target.value)}
-                  placeholder="e.g. jane-doe.jpg"
-                  required
-                />
-              </div>
-              <div>
-                <label className="label-text font-medium">Signature (file name)</label>
-                <input
-                  className="input input-bordered w-full"
-                  value={signature}
-                  onChange={(e) => setSignature(e.target.value)}
-                  placeholder="e.g. jane-doe-signature.png"
-                  required
-                />
-              </div>
+              <FileField
+                label="Profile Picture"
+                file={profilePictureFile}
+                previewUrl={profilePicturePreview}
+                existingName={existingProfilePicture}
+                onChange={handleProfilePictureChange}
+                required={!isEdit}
+              />
+              <FileField
+                label="Signature"
+                file={signatureFile}
+                previewUrl={signaturePreview}
+                existingName={existingSignature}
+                onChange={handleSignatureChange}
+                required={!isEdit}
+              />
             </div>
           </section>
 

@@ -69,6 +69,15 @@ export const CREATE_PROGRAM = gql`
   }
 `;
 
+export const DELETE_PROGRAM = gql`
+  mutation DeleteProgram($id: ID!) {
+    deleteProgram(id: $id) {
+      success
+      message
+    }
+  }
+`;
+
 export const SAVE_PROGRAM_STRUCTURE = gql`
   mutation SaveProgramStructure($input: SaveProgramStructureInput!) {
     saveProgramStructure(input: $input) {

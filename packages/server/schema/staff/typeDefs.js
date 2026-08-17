@@ -22,9 +22,9 @@ const staffTypeDefs = `#graphql
         nssf: String!
         marital_status: String!
         next_of_kin: JSON!
-        profile_picture: String!
-        signature: String!,
-        
+        profile_picture: String
+        signature: String
+
     }
 
     input StaffInput {
@@ -46,8 +46,8 @@ const staffTypeDefs = `#graphql
         nssf: String!
         marital_status: String!
         next_of_kin: String!
-        profile_picture: String!
-        signature: String!,
+        profile_picture: Upload
+        signature: Upload
     }
 
     type Query {

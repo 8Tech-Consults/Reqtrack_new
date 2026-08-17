@@ -17,8 +17,12 @@ const RequisitionsListPage = () => {
   const [createOpen, setCreateOpen] = useState(false);
 
   const { auth, currentUser } = useAuthContext();
-  const permissions = getPermissionsFromToken(auth?.access_token);
-  const canEditRequisitions = Boolean(permissions.can_edit_requisitions);
+  const perms = getPermissionsFromToken(auth?.access_token);
+  const canEditRequisitions = Boolean(perms.can_edit_requisitions);
+
+  const canCreateRequisitions = !!perms['can_create_requisitions'];
+  const canAcceptRequisitions = !!perms['can_accept_requisitions'];
+  const canApproveRequisitions = !!perms['can_approve_requisitions'];
 
   const handleExportClick = () => {
     if (exportFnRef.current) {
@@ -45,7 +49,7 @@ const RequisitionsListPage = () => {
             >
               Export
             </button>
-            {canEditRequisitions && (
+            {canCreateRequisitions && (
               <button
                 onClick={() => setCreateOpen(true)}
                 className="btn btn-sm btn-primary"

@@ -10,6 +10,7 @@ import saveImage from "../../helpers/saveImage.js";
 import tryParseJSON from "../../helpers/tryParseJSON.js";
 import hasPermission from "../../helpers/hasPermission.js";
 import { getRoles } from "../role/resolvers.js";
+import { fetchStaff } from "../staff/resolvers.js";
 import sendEmail from "../../utils/emails/email_server.js";
 
 const ensureAnyPermission = (userPermissions, keys, message) => {
@@ -278,6 +279,13 @@ const DU_AGENT_ROLE_PERMISSIONS = [
 const userResolvers = {
   Date: GraphQLDate,
   Upload: GraphQLUpload,
+  User: {
+    staffDetails: async (parent) => {
+      if (!parent?.id) return null;
+      const [staff] = await fetchStaff({ id: parent.id, limit: 1 });
+      return staff || null;
+    },
+  },
   Query: {
     users: async (_, args, context) => {
       // const userPermissions = context?.req?.user?.permissions;

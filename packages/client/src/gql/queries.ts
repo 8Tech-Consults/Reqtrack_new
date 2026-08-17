@@ -28,6 +28,10 @@ const LOAD_USERS = gql`
       created_at
       updated_at
       must_change_password
+      staffDetails {
+        signature
+        role_name
+      }
     }
     usersCount(search: $search, roleName: $roleName, district: $district)
   }

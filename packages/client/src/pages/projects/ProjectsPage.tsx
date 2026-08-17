@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/sheet';
 import {
   CREATE_PROGRAM,
+  DELETE_PROGRAM,
   GET_PROGRAM_MANAGERS,
   GET_PROGRAMS,
   ProgramManager,
@@ -66,11 +67,13 @@ const calculateBudgetLineTotal = (draft: Pick<BudgetLineDraft, 'quantity' | 'fre
 const RowActionsMenu = ({
   onEdit,
   onRemove,
-  editLabel = 'Edit'
+  editLabel = 'Edit',
+  removeLabel = 'Remove'
 }: {
   onEdit?: () => void;
   onRemove: () => void;
   editLabel?: string;
+  removeLabel?: string;
 }) => (
   <DropdownMenu>
     <DropdownMenuTrigger asChild>
@@ -89,7 +92,7 @@ const RowActionsMenu = ({
         </DropdownMenuItem>
       )}
       <DropdownMenuItem onClick={onRemove} className="gap-2 text-rose-600 focus:text-rose-600">
-        <Trash2 size={14} /> Remove
+        <Trash2 size={14} /> {removeLabel}
       </DropdownMenuItem>
     </DropdownMenuContent>
   </DropdownMenu>
@@ -99,10 +102,9 @@ export const ProjectsPage = () => {
   const { auth } = useAuthContext();
   const permissions = useMemo(() => getPermissionsFromToken(auth?.access_token), [auth?.access_token]);
   const canManagePrograms = Boolean(
-    permissions.can_manage_projects ||
-      permissions.can_create_projects ||
-      permissions.can_edit_projects ||
-      permissions.can_manage_templates ||
+    permissions.can_manage_programs ||
+      permissions.can_create_programs ||
+      permissions.can_edit_programs ||
       permissions.can_manage_users ||
       permissions.can_manage_roles
   );
@@ -122,6 +124,10 @@ export const ProjectsPage = () => {
     refetchQueries: [{ query: GET_PROGRAMS }],
     awaitRefetchQueries: true
   });
+  const [deleteProgram] = useMutation(DELETE_PROGRAM, {
+    refetchQueries: [{ query: GET_PROGRAMS }],
+    awaitRefetchQueries: true
+  });
 
   const programs = data?.programs || [];
   const managers = managerData?.programManagers || [];
@@ -138,6 +144,8 @@ export const ProjectsPage = () => {
   const [programDescription, setProgramDescription] = useState('');
   const [budgetAmount, setBudgetAmount] = useState('');
   const [programManagerId, setProgramManagerId] = useState('');
+  const [editingProgramId, setEditingProgramId] = useState<string | null>(null);
+  const [deletingProgramId, setDeletingProgramId] = useState<string | null>(null);
   const [budgetSheetOpen, setBudgetSheetOpen] = useState(false);
   const [budgetDraft, setBudgetDraft] = useState<BudgetLineDraft | null>(null);
   const [collapsedOutcomes, setCollapsedOutcomes] = useState<Set<string>>(new Set());
@@ -421,6 +429,43 @@ export const ProjectsPage = () => {
     });
   };
 
+  const handleOpenCreateProgram = () => {
+    setEditingProgramId(null);
+    setProgramName('');
+    setProgramDescription('');
+    setBudgetAmount('');
+    setProgramManagerId('');
+    setCreateError('');
+    setCreateOpen(true);
+  };
+
+  const handleOpenEditProgram = (program: ProgramRecord) => {
+    setEditingProgramId(program.id);
+    setProgramName(program.name);
+    setProgramDescription(program.description || '');
+    setBudgetAmount(String(program.budgetAmount ?? ''));
+    setProgramManagerId(program.programManagerId || '');
+    setCreateError('');
+    setCreateOpen(true);
+  };
+
+  const handleDeleteProgram = async (program: ProgramRecord) => {
+    if (!window.confirm(`Delete program "${program.name}"? This cannot be undone.`)) return;
+
+    setDeletingProgramId(program.id);
+    try {
+      const response = await deleteProgram({ variables: { id: program.id } });
+      if (!response.data?.deleteProgram?.success) {
+        throw new Error(response.data?.deleteProgram?.message || 'Failed to delete program.');
+      }
+      toast.success('Program deleted successfully.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to delete program.');
+    } finally {
+      setDeletingProgramId(null);
+    }
+  };
+
   const handleCreateProgram = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setCreateError('');
@@ -435,6 +480,7 @@ export const ProjectsPage = () => {
       const response = await createProgram({
         variables: {
           input: {
+            id: editingProgramId || undefined,
             name: programName.trim(),
             description: programDescription.trim() || null,
             budgetAmount: Number(budgetAmount || 0),
@@ -444,21 +490,23 @@ export const ProjectsPage = () => {
         }
       });
 
-      const createdProgram = response.data?.createProgram?.program;
+      const savedProgram = response.data?.createProgram?.program;
+      const wasEdit = Boolean(editingProgramId);
       await refetch();
       setCreateOpen(false);
+      setEditingProgramId(null);
       setProgramName('');
       setProgramDescription('');
       setBudgetAmount('');
       setProgramManagerId('');
 
-      if (createdProgram?.id) {
-        setSelectedProgramId(createdProgram.id);
+      if (savedProgram?.id) {
+        setSelectedProgramId(savedProgram.id);
       }
 
-      toast.success('Program created successfully.');
+      toast.success(wasEdit ? 'Program updated successfully.' : 'Program created successfully.');
     } catch (error) {
-      setCreateError(error instanceof Error ? error.message : 'Failed to create program.');
+      setCreateError(error instanceof Error ? error.message : 'Failed to save program.');
     } finally {
       setCreatingProgram(false);
     }
@@ -539,7 +587,7 @@ export const ProjectsPage = () => {
           </div>
 
           {canManagePrograms && (
-            <button type="button" className="btn btn-primary" onClick={() => setCreateOpen(true)}>
+            <button type="button" className="btn btn-primary" onClick={handleOpenCreateProgram}>
               New Program
             </button>
           )}
@@ -579,7 +627,7 @@ export const ProjectsPage = () => {
               <div className="flex items-center justify-between gap-2">
                 <h3 className="text-sm font-semibold text-slate-900">Programs</h3>
                 {canManagePrograms && (
-                  <button type="button" className="btn btn-sm btn-light" onClick={() => setCreateOpen(true)}>
+                  <button type="button" className="btn btn-sm btn-light" onClick={handleOpenCreateProgram}>
                     Create Program
                   </button>
                 )}
@@ -589,24 +637,35 @@ export const ProjectsPage = () => {
                 <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-600 space-y-3">
                   <p>No programs have been created yet.</p>
                   {canManagePrograms && (
-                    <button type="button" className="btn btn-sm btn-primary" onClick={() => setCreateOpen(true)}>
+                    <button type="button" className="btn btn-sm btn-primary" onClick={handleOpenCreateProgram}>
                       Create First Program
                     </button>
                   )}
                 </div>
               ) : (
                 programs.map((program) => (
-                  <button
+                  <div
                     key={program.id}
-                    type="button"
                     onClick={() => setSelectedProgramId(program.id)}
-                    className={`w-full rounded-lg border px-3 py-2 text-left ${selectedProgram?.id === program.id ? 'border-blue-200 bg-blue-50' : 'border-slate-200 bg-white hover:bg-slate-50'}`}
+                    className={`w-full rounded-lg border px-3 py-2 text-left cursor-pointer flex items-start justify-between gap-2 ${selectedProgram?.id === program.id ? 'border-blue-200 bg-blue-50' : 'border-slate-200 bg-white hover:bg-slate-50'}`}
                   >
-                    <p className="text-sm font-semibold text-slate-900">{program.name}</p>
-                    <p className="text-xs text-slate-500 mt-1">
-                      {formatMoney(program.budgetAmount)} · {program.programManagerName || 'Unassigned'}
-                    </p>
-                  </button>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-slate-900 truncate">{program.name}</p>
+                      <p className="text-xs text-slate-500 mt-1">
+                        {formatMoney(program.budgetAmount)} · {program.programManagerName || 'Unassigned'}
+                      </p>
+                    </div>
+                    {canManagePrograms && (
+                      <div onClick={(event) => event.stopPropagation()} className="shrink-0">
+                        <RowActionsMenu
+                          editLabel="Edit"
+                          removeLabel={deletingProgramId === program.id ? 'Deleting...' : 'Delete'}
+                          onEdit={() => handleOpenEditProgram(program)}
+                          onRemove={() => handleDeleteProgram(program)}
+                        />
+                      </div>
+                    )}
+                  </div>
                 ))
               )}
             </aside>
@@ -845,7 +904,9 @@ export const ProjectsPage = () => {
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="max-w-xl p-0">
           <DialogHeader className="px-5 py-4 border-b border-slate-100">
-            <DialogTitle className="text-base font-semibold text-slate-900">Create Program</DialogTitle>
+            <DialogTitle className="text-base font-semibold text-slate-900">
+              {editingProgramId ? 'Edit Program' : 'Create Program'}
+            </DialogTitle>
           </DialogHeader>
 
           <form className="p-5 space-y-4" onSubmit={handleCreateProgram}>
@@ -879,16 +940,25 @@ export const ProjectsPage = () => {
               </div>
             </div>
 
-            <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-800">
-              This creates the program first. The hierarchy is added from the selected program view.
-            </div>
+            {!editingProgramId && (
+              <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+                This creates the program first. The hierarchy is added from the selected program view.
+              </div>
+            )}
 
             <div className="flex justify-end gap-2">
-              <button type="button" className="btn btn-light" onClick={() => setCreateOpen(false)}>
+              <button
+                type="button"
+                className="btn btn-light"
+                onClick={() => {
+                  setCreateOpen(false);
+                  setEditingProgramId(null);
+                }}
+              >
                 Cancel
               </button>
               <button type="submit" className="btn btn-primary" disabled={creatingProgram}>
-                {creatingProgram ? 'Creating...' : 'Create Program'}
+                {creatingProgram ? 'Saving...' : editingProgramId ? 'Save Changes' : 'Create Program'}
               </button>
             </div>
           </form>

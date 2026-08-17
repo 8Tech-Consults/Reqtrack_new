@@ -4,11 +4,12 @@ import { v4 as uuidv4 } from "uuid";
 import { db } from "../../config/config.js";
 import saveData from "../../utils/db/saveData.js";
 import checkPermission from "../../helpers/checkPermission.js";
+import saveUpload from "../../helpers/saveUpload.js";
 import { getRoles } from "../role/resolvers.js";
 
 const DEFAULT_STAFF_PASSWORD = "NAD@2026";
 
-const fetchStaff = async ({
+export const fetchStaff = async ({
     id,
     limit = 10,
     offset = 0,
@@ -98,10 +99,10 @@ const staffResolvers = {
                 signature
             } = input;
 
-            const conn = await db.getConnection();
+            const connection = await db.getConnection();
 
             try {
-                conn.beginTransaction();
+                await connection.beginTransaction();
                 const normalizedEmail = String(email || "").trim().toLowerCase();
 
                 const [role] = await getRoles({ role_name });
@@ -117,7 +118,7 @@ const staffResolvers = {
                     const hashedPwd = await bcrypt.hash(DEFAULT_STAFF_PASSWORD, salt);
 
                     userId = await saveData({
-                        conn,
+                        connection,
                         table: "users",
                         data: {
                             id: uuidv4(),
@@ -133,7 +134,7 @@ const staffResolvers = {
                 } else {
                     // Existing staff member: keep their credentials, just sync the profile fields.
                     await saveData({
-                        conn,
+                        connection,
                         table: "users",
                         data: {
                             name,
@@ -144,38 +145,8 @@ const staffResolvers = {
                     });
                 }
 
-                const staffId = await saveData({
-                    conn,
-                    table: "staff",
-                    data: {
-                        user_id: userId,
-                        staff_number,
-                        nin_number,
-                        date_of_birth,
-                        title,
-                        contract_start,
-                        contract_end,
-                        telephone,
-                        email: normalizedEmail,
-                        bank,
-                        bank_account,
-                        tin,
-                        nssf,
-                        marital_status,
-                        next_of_kin,
-                        profile_picture,
-                        signature
-                    },
-                    id: id ? id : null,
-                });
-
-                await conn.commit();
-
-                return {
-                    id: staffId,
+                const staffData = {
                     user_id: userId,
-                    name,
-                    role_name: role.name,
                     staff_number,
                     nin_number,
                     date_of_birth,
@@ -190,14 +161,60 @@ const staffResolvers = {
                     nssf,
                     marital_status,
                     next_of_kin,
-                    profile_picture,
-                    signature,
+                };
+
+                // profile_picture/signature are GraphQL Upload values. Only touch these
+                // columns when a new file was actually sent, so editing a staff member
+                // without re-selecting a photo/signature doesn't wipe the existing one.
+                if (profile_picture) {
+                    const savedProfilePicture = await saveUpload({
+                        file: profile_picture,
+                        subdir: "staff",
+                        maxSize: 5 * 1024 * 1024,
+                    });
+                    staffData.profile_picture = savedProfilePicture.filename;
+                }
+
+                if (signature) {
+                    const savedSignature = await saveUpload({
+                        file: signature,
+                        subdir: "staff",
+                        maxSize: 5 * 1024 * 1024,
+                    });
+                    staffData.signature = savedSignature.filename;
+                }
+
+                const staffId = await saveData({
+                    connection,
+                    table: "staff",
+                    data: staffData,
+                    id: id ? id : null,
+                });
+
+                const [[savedStaff]] = await connection.execute(
+                    `SELECT staff.*, users.name AS name
+                     FROM staff
+                     LEFT JOIN users ON users.id = staff.user_id
+                     WHERE staff.id = ?
+                     LIMIT 1`,
+                    [staffId]
+                );
+
+                await connection.commit();
+
+                return {
+                    ...savedStaff,
+                    id: staffId,
+                    role_name: role.name,
                 };
             } catch (error) {
+                await connection.rollback();
                 if (error instanceof GraphQLError) {
                     throw error;
                 }
                 throw new GraphQLError(error.message);
+            } finally {
+                connection.release();
             }
         }
 

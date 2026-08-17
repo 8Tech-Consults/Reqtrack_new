@@ -114,6 +114,7 @@ const programsTypeDefs = `#graphql
   type Mutation {
     createProgram(input: ProgramInput!): ProgramMutationResponse!
     saveProgramStructure(input: SaveProgramStructureInput!): ProgramStructureResponse!
+    deleteProgram(id: ID!): ProgramMutationResponse!
   }
 `;
 

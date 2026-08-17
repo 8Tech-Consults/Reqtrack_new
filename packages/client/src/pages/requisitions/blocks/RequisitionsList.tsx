@@ -89,6 +89,14 @@ const RequisitionsList = ({
   const [saving, setSaving] = useState(false);
   const pageSize = 10;
 
+  const statusBadge: Record<string, string> = {
+    Pending: 'border-slate-200 bg-slate-50 text-slate-700',
+    Accepted: 'border-blue-200 bg-blue-50 text-blue-700',
+    Approved: 'border-green-200 bg-green-50 text-green-700',
+    Rejected: 'border-rose-200 bg-rose-50 text-rose-700',
+    'Amendment Requested': 'border-amber-200 bg-amber-50 text-amber-700',
+  };
+
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(searchTerm);
@@ -330,8 +338,8 @@ const RequisitionsList = ({
         accessorKey: 'status',
         header: ({ column }) => <DataGridColumnHeader title="Status" column={column} />,
         cell: ({ row }) => (
-          <span className="badge badge-outline border-blue-200 bg-blue-50 text-blue-700">
-            {row.original.status}
+          <span className={`badge badge-outline ${statusBadge[row.original.status] }`}>
+                 {row.original.status}
           </span>
         ),
       },
@@ -366,7 +374,7 @@ const RequisitionsList = ({
                   </MenuLink>
                 </MenuItem>
 
-                {canEdit && (
+                {canEdit && row.original.status === 'Pending' && (
                   <>
                     <MenuItem
                       onClick={() => {
