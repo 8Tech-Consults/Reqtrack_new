@@ -17,9 +17,29 @@ const statusLegend = [
   { badgeColor: 'badge-danger', label: 'Halted', barColor: 'bg-danger' },
 ];
 
+interface AccountabilityHighlightsData {
+  accountabilityHighlights: {
+    totalAccountedAmountFormatted: string;
+    percentChange: number | null;
+    statusBreakdown: {
+      closedPercent: number;
+      pendingPercent: number;
+      haltedPercent: number;
+    };
+    recent: Array<{
+      requisitionNo: string;
+      totalAccountedAmount: number;
+      overBudget: boolean;
+    }>;
+  };
+}
+
 const Highlights = ({ limit = 5 }: IHighlightsProps) => {
   const { isRTL } = useLanguage();
-  const { data, loading, error } = useQuery(ACCOUNTABILITY_HIGHLIGHTS, { variables: { limit } });
+  const { data, loading, error } = useQuery<AccountabilityHighlightsData, { limit: number }>(
+    ACCOUNTABILITY_HIGHLIGHTS,
+    { variables: { limit } }
+  );
 
   const highlights = data?.accountabilityHighlights;
   const breakdown = highlights?.statusBreakdown;

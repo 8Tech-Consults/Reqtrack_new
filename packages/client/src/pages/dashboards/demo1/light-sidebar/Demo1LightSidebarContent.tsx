@@ -12,11 +12,15 @@ import { MONTHLYREQUISITIONEXPENSE, REQUISITIONSTATUSCHART } from '@/gql/dashboa
 import RecentRequisitions from '../../RecentRequisition';
 
 const Demo1LightSidebarContent = () => {
-  const { data, loading, error } = useQuery(REQUISITIONSTATUSCHART);
+  const { data } = useQuery<{
+    requisitionStatusChart: import('@/pages/public-profile/profiles/default/blocks/Contributions').RequisitionStatusChart;
+  }>(REQUISITIONSTATUSCHART);
   const statusData = data;
 
   //monthly requisition expenses
-  const {data:ExpenseData, loading: expenseLoading} = useQuery(MONTHLYREQUISITIONEXPENSE, {
+  const { data: ExpenseData } = useQuery<{
+    yearExpense: Array<{ month: number; totalAmount: number }>;
+  }, { year: number }>(MONTHLYREQUISITIONEXPENSE, {
     variables: {
       "year": 2026
     },

@@ -25,7 +25,7 @@ export function AccountabilitiesList(
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
 
-  const { data, loading, error } = useQuery(
+  const { data, loading, error } = useQuery<{ accountabilities: Accountability[] }, AccountabilitiesVars>(
     GET_ACCOUNTABILITIES,
     { variables: {
         limit: PAGE_SIZE,

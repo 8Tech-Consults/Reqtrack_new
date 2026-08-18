@@ -33,7 +33,15 @@ export const formatMoney = (value: number) =>
     maximumFractionDigits: 0,
   }).format(value || 0);
 
-export type RequisitionStatus = 'Draft' | 'Submitted' | 'Approved' | 'Rejected';
+export type RequisitionStatus =
+  | 'Draft'
+  | 'Pending'
+  | 'Submitted'
+  | 'Accepted'
+  | 'Approved'
+  | 'Rejected'
+  | 'Amendment Requested'
+  | 'Amended';
 
 export type RequisitionItem = {
   id: string;
@@ -53,7 +61,12 @@ export type RequisitionRecord = {
   outcomeId?: string | null;
   outputId?: string | null;
   activityId?: string | null;
-  requestedBy: { id: string; email: string; name: string };
+  requestedBy: {
+    id: string;
+    email: string;
+    name: string;
+    staffDetails?: { signature?: string | null } | null;
+  };
   title: string;
   purpose?: string | null;
   conceptNote?: string | null;
@@ -112,7 +125,7 @@ const RequisitionsList = ({
     loading: fetching,
     error: queryError,
     refetch,
-  } = useQuery(GET_REQUISITIONS, {
+  } = useQuery<{ requisitions: RequisitionRecord[] }>(GET_REQUISITIONS, {
     variables: {
       limit: pageSize,
       offset: 0,

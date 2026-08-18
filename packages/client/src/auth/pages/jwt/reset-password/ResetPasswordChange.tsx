@@ -48,7 +48,7 @@ const ResetPasswordChange = () => {
       }
 
       try {
-        await changePassword(email, token, values.newPassword, values.confirmPassword);
+        await changePassword(token, values.newPassword, values.confirmPassword);
         setHasErrors(false);
         navigate(
           currentLayout?.name === 'auth-branded'

@@ -19,6 +19,13 @@ type Props = {
   onStatusChange?: (id: string, status: RequisitionStatus, reason?: string) => void;
 };
 
+type RequisitionUser = {
+  id: string;
+  name: string;
+  email?: string;
+  staffDetails?: { signature?: string | null; role_name?: string | null } | null;
+};
+
 const statusBadge: Record<string, string> = {
   Pending: 'border-slate-200 bg-slate-50 text-slate-700',
   Accepted: 'border-blue-200 bg-blue-50 text-blue-700',
@@ -35,7 +42,9 @@ const RequisitionDetailSheet = ({ open, onOpenChange, detailRow, canEdit, updati
   const needsReason = pendingAction === 'Rejected' || pendingAction === ('Amendment Requested' as RequisitionStatus);
 
   const { auth } = useAuthContext();
-  const { data, loading: usersLoading, error: usersError } = useQuery(LOAD_USERS, {
+  const { data, loading: usersLoading, error: usersError } = useQuery<{
+    users: RequisitionUser[];
+  }>(LOAD_USERS, {
     fetchPolicy: "network-only",
   });
 
@@ -412,7 +421,7 @@ const RequisitionDetailSheet = ({ open, onOpenChange, detailRow, canEdit, updati
             let log: { action: string; reason?: string; by?: string; at?: string }[] = [];
             try { log = detailRow.reason ? JSON.parse(detailRow.reason) : []; } catch { log = []; }
             let userMap: Record<string, string> = {};
-            try { userMap = Object.fromEntries(users.map(u => [u.id, u.name])); } catch { userMap = {}; }
+            try { userMap = Object.fromEntries((users ?? []).map(u => [u.id, u.name])); } catch { userMap = {}; }
             if (!log.length) return null;
             const actionColour: Record<string, string> = {
               Approved: 'bg-green-500',
@@ -557,6 +566,4 @@ const RequisitionDetailSheet = ({ open, onOpenChange, detailRow, canEdit, updati
 };
 
 export { RequisitionDetailSheet };
-
-
 

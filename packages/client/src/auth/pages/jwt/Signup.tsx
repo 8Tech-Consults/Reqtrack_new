@@ -53,7 +53,15 @@ const Signup = () => {
         if (!register) {
           throw new Error('JWTProvider is required for this form.');
         }
-        await register(values.email, values.password, values.changepassword);
+        await register({
+          username: values.email,
+          name: values.email,
+          premises_location: '',
+          phone_number: '',
+          email: values.email,
+          district: '',
+          password: values.password
+        });
         navigate(from, { replace: true });
       } catch (error) {
         console.error(error);

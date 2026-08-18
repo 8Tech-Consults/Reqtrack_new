@@ -15,7 +15,14 @@ interface IChannelStatsItem {
 interface IChannelStatsItems extends Array<IChannelStatsItem> {}
 
 const ChannelStats = () => {
-  const { data, loading, error } = useQuery(REQUISITIONSTATISSUMMARY);
+  const { data, loading, error } = useQuery<{
+    requisitionStatusSummary: {
+      pendingRequisitions: number;
+      directorRequisitions: number;
+      pendingAccountabilityNames: string[];
+      totalAmountRequestedFormatted: string;
+    };
+  }>(REQUISITIONSTATISSUMMARY);
 
   const summary = data?.requisitionStatusSummary;
 
