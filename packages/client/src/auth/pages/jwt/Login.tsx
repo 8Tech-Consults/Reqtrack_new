@@ -32,7 +32,7 @@ const Login = () => {
   const { login, auth } = useAuthContext();
   const navigate = useNavigate();
   const location = useLocation();
-  const from = location.state?.from?.pathname || '/';
+  const from = location.state?.from?.pathname || '/dashboard';
   const [showPassword, setShowPassword] = useState(false);
   const { currentLayout } = useLayout();
   const rememberedEmail = useMemo(() => localStorage.getItem('email') || '', []);
