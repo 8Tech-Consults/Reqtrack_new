@@ -61,7 +61,9 @@ const FileSlot = ({
 );
 
 export function AccountabilityForm({ requisitionId, requisitionItems, existing, onSaved, onCancel }: Props) {
-  const [save, { loading, error }] = useMutation(
+  const [save, { loading, error }] = useMutation<{
+    saveAccountability: { success: boolean; message: string; accountability: { id: string } | null };
+  }, { input: import('../accountability').AccountabilityInput }>(
     SAVE_ACCOUNTABILITY,
     { refetchQueries: [GET_ACCOUNTABILITIES] }
   );;
@@ -108,7 +110,8 @@ export function AccountabilityForm({ requisitionId, requisitionItems, existing, 
         },
       },
     });
-    if (data?.saveAccountability.id) onSaved(data.saveAccountability.id);
+    const savedId = data?.saveAccountability.accountability?.id;
+    if (savedId) onSaved(savedId);
   };
 
   return (

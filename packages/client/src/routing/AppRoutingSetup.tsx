@@ -94,7 +94,7 @@ const AppRoutingSetup = (): ReactElement => {
     <Routes>
       <Route element={<RequireAuth />}>
         <Route element={<Demo8Layout />}>
-        
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<DefaultPage />} />
           <Route path="/projects" element={<ProjectsPage />} />
           <Route path="/requisitions" element={<RequisitionsListPage />} />

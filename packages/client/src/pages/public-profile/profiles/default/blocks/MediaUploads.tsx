@@ -6,7 +6,11 @@ import { KeenIcon, Menu, MenuItem, MenuToggle } from '@/components';
 
 import { DropdownCard2 } from '@/partials/dropdowns/general';
 
-const MediaUploads = ({ExpenseData}) => {
+interface MediaUploadsProps {
+  ExpenseData?: { yearExpense?: Array<{ month: number; totalAmount: number }> };
+}
+
+const MediaUploads = ({ ExpenseData }: MediaUploadsProps) => {
   const { isRTL } = useLanguage();
   // const data: number[] = [85, 65, 50, 70, 40, 45, 100, 55, 85, 60, 70, 90];
   // const categories: string[] = [

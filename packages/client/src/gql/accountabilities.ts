@@ -41,8 +41,8 @@ export const SAVE_ACCOUNTABILITY = gql`
   saveAccountability(input: $input) {
     success
     message
+    accountability { id }
   }
 }
 `;
-
 

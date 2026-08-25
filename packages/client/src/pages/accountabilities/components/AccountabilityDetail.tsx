@@ -2,6 +2,7 @@ import { gql } from '@apollo/client';
 import { useQuery} from '@apollo/client/react';
 import { StatusBadge } from './StatusBadge';
 import { Pencil, ArrowLeft } from 'lucide-react';
+import type { Accountability } from '../accountability';
 
 const ACCOUNTABILITY_QUERY = gql`
   query Accountability($id: ID!) {
@@ -74,7 +75,10 @@ function FileLink({ label, name, baseUrl }: { label: string; name: string | null
 }
 
 export function AccountabilityDetail({ id, onBack, onEdit, fileBaseUrl }: Props) {
-  const { data, loading, error } = useQuery(ACCOUNTABILITY_QUERY, { variables: { id } });
+  const { data, loading, error } = useQuery<
+    { accountability: Accountability | null },
+    { id: string }
+  >(ACCOUNTABILITY_QUERY, { variables: { id } });
 
   if (loading) return <p className="text-sm text-slate-400">Loading...</p>;
   if (error) return <p className="text-sm text-red-600">Couldn't load this accountability. {error.message}</p>;

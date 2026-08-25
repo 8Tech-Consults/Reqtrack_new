@@ -116,15 +116,21 @@ export const ProjectsPage = () => {
     fetchPolicy: 'network-only'
   });
 
-  const [createProgram] = useMutation(CREATE_PROGRAM, {
+  const [createProgram] = useMutation<{
+    createProgram: { success: boolean; message?: string; program?: ProgramRecord | null };
+  }, { input: Record<string, unknown> }>(CREATE_PROGRAM, {
     refetchQueries: [{ query: GET_PROGRAMS }, { query: GET_PROGRAM_MANAGERS }],
     awaitRefetchQueries: true
   });
-  const [saveProgramStructure] = useMutation(SAVE_PROGRAM_STRUCTURE, {
+  const [saveProgramStructure] = useMutation<{
+    saveProgramStructure: { success: boolean; message?: string };
+  }, { input: Record<string, unknown> }>(SAVE_PROGRAM_STRUCTURE, {
     refetchQueries: [{ query: GET_PROGRAMS }],
     awaitRefetchQueries: true
   });
-  const [deleteProgram] = useMutation(DELETE_PROGRAM, {
+  const [deleteProgram] = useMutation<{
+    deleteProgram: { success: boolean; message?: string };
+  }, { id: string }>(DELETE_PROGRAM, {
     refetchQueries: [{ query: GET_PROGRAMS }],
     awaitRefetchQueries: true
   });

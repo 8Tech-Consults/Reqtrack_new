@@ -62,7 +62,7 @@ export function AccountabilitySection({ requisitionId, requisitionItems, fileBas
   // mode === 'view' and accountability exists
   return (
     <AccountabilityDetail
-      id={accountability.id}
+      id={accountability!.id}
       fileBaseUrl={fileBaseUrl}
       onBack={() => {}}          // no "back" needed — it's embedded in the requisition page
       onEdit={() => setMode('edit')}

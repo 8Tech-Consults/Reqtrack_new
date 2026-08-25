@@ -4,12 +4,19 @@ import { useLanguage } from '@/i18n';
 import { KeenIcon, Menu, MenuItem, MenuToggle } from '@/components';
 
 import { DropdownCard2 } from '@/partials/dropdowns/general';
-import { useQuery } from '@apollo/client/react';
-import { REQUISITIONSTATUSCHART } from '@/gql/dashboard';
+
+interface RequisitionStatusChart {
+  pendingCount: number;
+  acceptedCount: number;
+  approvedCount: number;
+  rejectedCount: number;
+  requireAmendmentCount: number;
+  amendedCount: number;
+}
 
 interface IContributionsProps {
   title: string;
-  statusData: any[]
+  statusData?: { requisitionStatusChart?: RequisitionStatusChart };
 }
 
 const Contributions = ({ title, statusData }: IContributionsProps) => {
@@ -130,4 +137,4 @@ const colors: string[] = [
   );
 };
 
-export { Contributions, type IContributionsProps };
+export { Contributions, type IContributionsProps, type RequisitionStatusChart };

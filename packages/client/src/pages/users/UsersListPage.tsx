@@ -396,7 +396,7 @@ const UsersListPage = () => {
   const apolloClient = useApolloClient();
   const [refreshKey, setRefreshKey] = useState(0);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const { data: rolesData, loading: rolesLoading, error: rolesError } = useQuery(ROLES);
+  const { data: rolesData, loading: rolesLoading, error: rolesError } = useQuery<RolesResponse>(ROLES);
   const [createUser, { loading: saving }] = useMutation(CREATE_USER);
   const [deleteUser] = useMutation(DELETE_USER);
 
