@@ -11,6 +11,8 @@ import { useDemo8Layout } from '..';
 import { SidebarMenu } from '.';
 import { usePathname } from '@/providers';
 import { useLanguage } from '@/i18n';
+import { useAuthContext } from '@/auth';
+import { getPermissionsFromToken } from '@/utils/permissions';
 import {
   Sheet,
   SheetContent,
@@ -27,6 +29,9 @@ const Sidebar = () => {
   const itemChatRef = useRef<any>(null);
   const itemUserRef = useRef<any>(null);
   const { isRTL } = useLanguage();
+  const { auth } = useAuthContext();
+  const permissions = getPermissionsFromToken(auth?.access_token);
+  const canManageSystem = Boolean(permissions.can_manage_users);
 
   const handleDropdownChatShow = () => {
     window.dispatchEvent(new Event('resize'));
@@ -85,7 +90,7 @@ const Sidebar = () => {
 
         <div ref={footerRef} className="flex flex-col gap-5 items-center shrink-0 pb-4">
           <div className="flex flex-col gap-1.5">
-            <Menu>
+            {/* <Menu>
               <MenuItem
                 ref={itemChatRef}
                 onShow={handleDropdownChatShow}
@@ -109,33 +114,35 @@ const Sidebar = () => {
 
                 {DropdownChat({ menuTtemRef: itemChatRef })}
               </MenuItem>
-            </Menu>
+            </Menu> */}
 
-            <Menu>
-              <MenuItem
-                ref={itemChatRef}
-                onShow={handleDropdownChatShow}
-                toggle="dropdown"
-                trigger="click"
-                dropdownProps={{
-                  placement: isRTL() ? 'right-start' : 'right-end',
-                  modifiers: [
-                    {
-                      name: 'offset',
-                      options: {
-                        offset: isRTL() ? [-20, 30] : [20, 30] // [skid, distance]
+            {canManageSystem && (
+              <Menu>
+                <MenuItem
+                  ref={itemChatRef}
+                  onShow={handleDropdownChatShow}
+                  toggle="dropdown"
+                  trigger="click"
+                  dropdownProps={{
+                    placement: isRTL() ? 'right-start' : 'right-end',
+                    modifiers: [
+                      {
+                        name: 'offset',
+                        options: {
+                          offset: isRTL() ? [-20, 30] : [20, 30] // [skid, distance]
+                        }
                       }
-                    }
-                  ]
-                }}
-              >
-                <MenuToggle className="btn btn-icon btn-icon-xl relative rounded-md size-9 border border-transparent hover:bg-light hover:text-primary hover:border-gray-200 dropdown-open:bg-gray-200 text-gray-600">
-                  <KeenIcon icon="setting-2" />
-                </MenuToggle>
+                    ]
+                  }}
+                >
+                  <MenuToggle className="btn btn-icon btn-icon-xl relative rounded-md size-9 border border-transparent hover:bg-light hover:text-primary hover:border-gray-200 dropdown-open:bg-gray-200 text-gray-600">
+                    <KeenIcon icon="setting-2" />
+                  </MenuToggle>
 
-                {DropdownApps()}
-              </MenuItem>
-            </Menu>
+                  {DropdownApps()}
+                </MenuItem>
+              </Menu>
+            )}
           </div>
 
           <Menu>

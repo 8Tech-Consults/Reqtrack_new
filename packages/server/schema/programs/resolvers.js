@@ -123,7 +123,7 @@ export const fetchPrograms = async ({id, programManager_id}) => {
     }
 
     const [rows] = await db.execute(
-      `SELECT p.id, p.name, p.description, p.budget_amount, p.program_manager_id, p.status, p.created_at,
+      `SELECT p.id, p.name, p.description, p.budget_amount, p.program_manager_id, p.status, p.type, p.created_at,
               u.name AS program_manager_name
       FROM programs p
       LEFT JOIN users u ON u.id = p.program_manager_id
@@ -145,6 +145,7 @@ export const fetchPrograms = async ({id, programManager_id}) => {
       programManagerId: row.program_manager_id || null,
       programManagerName: row.program_manager_name || null,
       status: row.status,
+      type: row.type || 'Activity',
       createdAt: row.created_at,
       outcomes: structureByProgram[String(row.id)] || []
     }));
@@ -159,6 +160,7 @@ const fetchProgramManagers = async () => {
      FROM users u
      LEFT JOIN roles r ON r.id = u.role_id
      WHERE u.deleted = 0
+     AND r.name IN ('Program Staff')
      ORDER BY u.name ASC`
   );
 
@@ -205,7 +207,15 @@ const programsResolvers = {
   Mutation: {
     createProgram: async (_parent, { input }, context) => {
       const userId = context?.req?.user?.id || null;
+      const saveId = input?.id || null;
+
+      const requestedType = input?.type || 'Activity';
+      if (!['Activity', 'Admin'].includes(requestedType)) {
+        throw new GraphQLError('Invalid program type.', { extensions: { code: 'BAD_USER_INPUT' } });
+      }
+
       const data = {
+
         name: String(input?.name || '').trim(),
         description: input?.description ? String(input.description).trim() : null,
         budget_amount: Number(input?.budgetAmount || 0),
@@ -217,6 +227,12 @@ const programsResolvers = {
         created_at: new Date(),
         updated_at: new Date()
       };
+
+      // type is only set at creation time and is immutable afterward, so it's
+      // deliberately left out of update payloads regardless of what's requested.
+      if (!saveId) {
+        data.type = requestedType;
+      }
 
       if (!data.name) {
         throw new GraphQLError('Program name is required.', { extensions: { code: 'BAD_USER_INPUT' } });
@@ -233,10 +249,41 @@ const programsResolvers = {
         });
       }
 
-      const saveId = input?.id || null;
-      const savedId = await saveData({ table: 'programs', id: saveId, data, connection: null });
+      const savedId = await saveData({
+        table: 'programs',
+        id: saveId,
+        data,
+        connection: null
+      });
+
+      if (!saveId && requestedType === 'Admin') {
+        const outcomeId = await saveData({
+          table: 'program_outcomes',
+          id: null,
+          data: {
+            program_id: savedId,
+            name: 'General',
+            sort_order: 0,
+            deleted: 0
+          },
+          connection: null
+        });
+
+        await saveData({
+          table: 'program_outputs',
+          id: null,
+          data: {
+            outcome_id: outcomeId,
+            name: 'General',
+            sort_order: 0,
+            deleted: 0
+          },
+          connection: null
+        });
+      }
+
       const [programs] = await db.execute(
-        `SELECT p.id, p.name, p.description, p.budget_amount, p.program_manager_id, p.status, p.created_at,
+        `SELECT p.id, p.name, p.description, p.budget_amount, p.program_manager_id, p.status, p.type, p.created_at,
                 u.name AS program_manager_name
          FROM programs p
          LEFT JOIN users u ON u.id = p.program_manager_id
@@ -249,13 +296,14 @@ const programsResolvers = {
         success: true,
         message: input?.id ? 'Program updated successfully.' : 'Program created successfully.',
         program: {
-          id: String(programs[0].id),
+          id: String(programs[0].id) || null,
           name: programs[0].name,
           description: programs[0].description || '',
           budgetAmount: Number(programs[0].budget_amount || 0),
           programManagerId: programs[0].program_manager_id || null,
           programManagerName: programs[0].program_manager_name || null,
           status: programs[0].status,
+          type: programs[0].type || 'Activity',
           createdAt: programs[0].created_at,
           outcomes: []
         }

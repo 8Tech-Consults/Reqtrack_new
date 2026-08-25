@@ -86,6 +86,7 @@ import { RolesListPage } from '@/pages/roles/RolesListPage';
 import { UsersListPage } from '@/pages/users/UsersListPage';
 import { RequisitionsListPage, AccountabilityPage } from '@/pages/requisitions';
 import { StaffsListPage } from '@/pages/staff';
+import { PermissionGuard } from '@/auth/PermissionGuard';
 // import { AccountabilitiesPage } from '@/pages/accountabilities/AccountabilitiesPage';
 
 const AppRoutingSetup = (): ReactElement => {
@@ -102,7 +103,11 @@ const AppRoutingSetup = (): ReactElement => {
           <Route path="/settings/roles" element={<RolesListPage />} />
           <Route path="/settings/users" element={<UsersListPage />} />
 
-          <Route path="/staff" element={<StaffsListPage />} />
+          <Route path="/staff" element={<PermissionGuard
+            required={['can_manage_staff']}
+          >
+            <StaffsListPage />
+          </PermissionGuard>} />
 
 
           {/* <Route path="/accountabilities" element={<AccountabilitiesPage />} /> */}
@@ -207,6 +212,7 @@ const AppRoutingSetup = (): ReactElement => {
       <Route path="error/*" element={<ErrorsRouting />} />
       <Route path="auth/*" element={<AuthPage />} />
       <Route path="*" element={<Navigate to="/error/404" />} />
+      <Route path="/" element={<Navigate to="/auth/login" />} />
     </Routes>
   );
 };

@@ -1,4 +1,17 @@
 import { type TMenuConfig } from '@/components/menu';
+import { MODULES_CONFIG } from '@/pages/roles/permissions.config';
+
+const byModuleId = Object.fromEntries(
+  MODULES_CONFIG.map((module) => [module.id, module]),
+);
+
+const getPerm = (moduleId: string, permissionId: string) => {
+  const module = byModuleId[moduleId];
+  const permission = module?.permissions.find(
+    (item) => item.id === permissionId,
+  );
+  return permission?.id ?? permissionId;
+};
 
 export const MENU_SIDEBAR: TMenuConfig = [
   {
@@ -19,7 +32,8 @@ export const MENU_SIDEBAR: TMenuConfig = [
   {
     title: 'Staff',
     icon: 'people',
-    path: '/staff'
+    path: '/staff',
+    requiredPermissions: [getPerm("staff", "can_manage_staff")]
   }
 ];
 

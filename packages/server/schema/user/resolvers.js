@@ -976,9 +976,9 @@ const userResolvers = {
         // Return a generic success response to avoid account enumeration.
         if (!user) {
           return {
-            success: true,
+            success: false,
             message:
-              "A password reset link has been sent to this email address.",
+              "This user doesnt exist.",
           };
         }
 
@@ -996,11 +996,11 @@ const userResolvers = {
         }
 
         const resetUrl = new URL(
-          "auth/reset-password",
+          "auth/reset-password/change",
           clientBaseUrl.endsWith("/") ? clientBaseUrl : `${clientBaseUrl}/`
         );
         resetUrl.searchParams.set("token", resetToken);
-        
+
         const params = {
           to: email,
           subject: "Password Reset Request",

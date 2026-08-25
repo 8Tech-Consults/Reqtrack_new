@@ -15,7 +15,7 @@ const Footer = () => {
               target="_blank"
               className="text-gray-600 hover:text-primary"
             >
-              Eight teach consults
+              Eight tech consults
             </a>
           </div>
           {/* <nav className="flex order-1 md:order-2 gap-4 font-normal text-2sm text-gray-600">

@@ -37,18 +37,17 @@ const ResetPasswordChange = () => {
       setHasErrors(undefined);
 
       const token = new URLSearchParams(window.location.search).get('token');
-      const email = new URLSearchParams(window.location.search).get('email');
 
-      if (!token || !email) {
+      if (!token) {
         setHasErrors(true);
-        setStatus('Token and email properties are required');
+        setStatus('Reset token is missing or invalid. Please request a new link.');
         setLoading(false);
         setSubmitting(false);
         return;
       }
 
       try {
-        await changePassword(email, token, values.newPassword, values.confirmPassword);
+        await changePassword(token, values.newPassword, values.confirmPassword);
         setHasErrors(false);
         navigate(
           currentLayout?.name === 'auth-branded'

@@ -10,6 +10,7 @@ export const GET_PROGRAMS = gql`
       programManagerId
       programManagerName
       status
+      type
       createdAt
       outcomes {
         id
@@ -63,6 +64,7 @@ export const CREATE_PROGRAM = gql`
         programManagerId
         programManagerName
         status
+        type
         createdAt
       }
     }
@@ -133,6 +135,7 @@ export type ProgramRecord = {
   programManagerId?: string | null;
   programManagerName?: string | null;
   status: string;
+  type: 'Activity' | 'Admin';
   createdAt: string;
   outcomes: ProgramOutcome[];
 };

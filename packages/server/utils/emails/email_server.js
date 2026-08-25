@@ -8,8 +8,8 @@ async function sendEmail(params) {
   
   const { to, subject, message, html, attachments, from } = params;
   
-  const smtpUser =  "info@ict4personswithdisabilities.org";
-  const smtpPass = process.env.SMTP_PASS || "Tvm6DKaU6@RiLe7";
+  const smtpUser =  "info@naduganda.org";
+  const smtpPass = "ejgvK1CLF(?[";
   const sender = from || process.env.SMTP_FROM || smtpUser;
 
   try {
@@ -19,9 +19,9 @@ async function sendEmail(params) {
 
     // create reusable transporter object using the default SMTP transport
     const transporter = nodemailer.createTransport({
-      host: "ict4personswithdisabilities.org",
-      port: 465,
-      secure: true, // true for 465, false for other ports
+      host: "naduganda.org",
+      port: 587,
+      secure: false, // true for 465, false for other ports
       auth: {
         user: smtpUser,
         pass: smtpPass,

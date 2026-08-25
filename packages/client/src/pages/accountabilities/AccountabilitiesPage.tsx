@@ -1,18 +1,9 @@
 import { useState } from 'react';
-import { gql } from '@apollo/client';
 import { useQuery } from '@apollo/client/react';
 import { AccountabilityForm } from './components/AccountabilityForm.tsx';
 import { AccountabilityDetail } from './components/AccountabilityDetail.tsx';
+import { GET_ACCOUNTABILITIES } from '@/gql/accountabilities';
 import { FileText } from 'lucide-react';
-
-const ACCOUNTABILITY_FOR_REQUISITION_QUERY = gql`
-  query AccountabilityForRequisition($requisitionId: ID!) {
-    accountabilities(requisitionId: $requisitionId, limit: 1) {
-      id
-      status
-    }
-  }
-`;
 
 interface RequisitionItemOption {
   id: string;
@@ -31,8 +22,8 @@ type Mode = 'view' | 'create' | 'edit';
 export function AccountabilitySection({ requisitionId, requisitionItems, fileBaseUrl }: Props) {
   const [mode, setMode] = useState<Mode>('view');
 
-  const { data, loading, error, refetch } = useQuery(ACCOUNTABILITY_FOR_REQUISITION_QUERY, {
-    variables: { requisitionId },
+  const { data, loading, error, refetch } = useQuery(GET_ACCOUNTABILITIES, {
+    variables: { requisitionId, limit: 1 },
   });
 
   const accountability = data?.accountabilities?.[0] ?? null;
