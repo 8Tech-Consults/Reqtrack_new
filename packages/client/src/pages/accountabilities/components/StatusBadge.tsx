@@ -6,6 +6,8 @@ const STYLES: Record<AccountabilityStatus, string> = {
   'Under Review': 'bg-amber-50 text-amber-700 border-amber-200',
   Approved: 'bg-green-50 text-green-700 border-green-200',
   Rejected: 'bg-red-50 text-red-700 border-red-200',
+  'Additional Info Requested': 'bg-orange-50 text-orange-700 border-orange-200',
+  Closed: 'bg-slate-200 text-slate-700 border-slate-300',
 };
 
 export function StatusBadge({ status }: { status: AccountabilityStatus }) {

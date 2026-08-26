@@ -56,7 +56,8 @@ export const MODULES_CONFIG: ModuleConfig[] = [
       { id: "can_edit_accountabilities", label: "Can Edit Accountabilities" },
       { id: "can_delete_accountabilities", label: "Can Delete Accountabilities" },
       { id: "can_view_own_accountabilities", label: "Can View Own Accountabilities" },
-      { id: "can_approve_accountabilities", label: "Can Approve Accountabilities" },
+      // { id: "can_approve_accountabilities", label: "Can Approve Accountabilities" },
+      { id: "can_review_accountability", label: "Can Review Accountabilities (Close / Request Info)" },
     ],
   },
   {

@@ -46,3 +46,15 @@ export const SAVE_ACCOUNTABILITY = gql`
 }
 `;
 
+export const UPDATE_ACCOUNTABILITY_STATUS = gql`
+  mutation UpdateAccountabilityStatus($id: ID!, $status: String!, $notes: String) {
+    updateAccountabilityStatus(id: $id, status: $status, notes: $notes) {
+      id
+      status
+      reviewedAt
+      reviewNotes
+      reviewedBy { id name }
+    }
+  }
+`;
+

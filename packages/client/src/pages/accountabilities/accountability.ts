@@ -3,7 +3,9 @@ export type AccountabilityStatus =
   | 'Submitted'
   | 'Under Review'
   | 'Approved'
-  | 'Rejected';
+  | 'Rejected'
+  | 'Additional Info Requested'
+  | 'Closed';
 
 export interface AccountabilitiesVars {
   limit?: number;

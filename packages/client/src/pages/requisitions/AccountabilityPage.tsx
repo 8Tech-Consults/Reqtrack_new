@@ -53,14 +53,14 @@ const AccountabilityPage = () => {
       </Container>
 
       <Container>
-        <div className="bg-white p-6 rounded shadow">
+        <div className="bg-white p-6 rounded shadow max-w-6xl mx-auto">
           {loading && !data ? (
             <p className="text-sm text-slate-400">Loading requisition...</p>
           ) : error ? (
             <p className="text-sm text-red-600">Couldn't load this requisition.</p>
           ) : !requisition ? (
             <p className="text-sm text-slate-500">Requisition not found.</p>
-          ) : requisition.status !== 'Approved' ? (
+          ) : requisition.status !== 'Approved' && requisition.status !== 'Closed' ? (
             <p className="text-sm text-slate-500">
               Accountability is only available once this requisition has been approved.
             </p>

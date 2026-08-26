@@ -32,6 +32,7 @@ const statusBadge: Record<string, string> = {
   Approved: 'border-green-200 bg-green-50 text-green-700',
   Rejected: 'border-rose-200 bg-rose-50 text-rose-700',
   'Amendment Requested': 'border-amber-200 bg-amber-50 text-amber-700',
+  Closed: 'border-slate-300 bg-slate-200 text-slate-700',
 };
 
 const RequisitionDetailSheet = ({ open, onOpenChange, detailRow, canEdit, updatingStatus, onStatusChange }: Props) => {
@@ -454,7 +455,7 @@ const RequisitionDetailSheet = ({ open, onOpenChange, detailRow, canEdit, updati
           })()}
 
           {/* — Accountability — */}
-          {(detailRow.status === 'Approved') && (
+          {(detailRow.status === 'Approved' || detailRow.status === 'Closed') && (
             <section className="space-y-3">
               <div className="flex items-center gap-2 pb-1 border-b">
                 <div className="p-1.5 bg-blue-50 rounded text-blue-600"><Receipt size={15} /></div>
