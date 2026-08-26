@@ -109,10 +109,10 @@ export const ProjectsPage = () => {
       permissions.can_manage_roles
   );
 
-  const { loading, error, data, refetch } = useQuery(GET_PROGRAMS, {
+  const { loading, error, data, refetch } = useQuery<{ programs: ProgramRecord[] }>(GET_PROGRAMS, {
     fetchPolicy: 'network-only'
   });
-  const { data: managerData } = useQuery(GET_PROGRAM_MANAGERS, {
+  const { data: managerData } = useQuery<{ programManagers: ProgramManager[] }>(GET_PROGRAM_MANAGERS, {
     fetchPolicy: 'network-only'
   });
 

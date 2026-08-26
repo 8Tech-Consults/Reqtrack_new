@@ -3,6 +3,7 @@ import { useQuery } from '@apollo/client/react';
 import { AccountabilityForm } from './components/AccountabilityForm.tsx';
 import { AccountabilityDetail } from './components/AccountabilityDetail.tsx';
 import { GET_ACCOUNTABILITIES } from '@/gql/accountabilities';
+import type { Accountability, AccountabilitiesVars } from './accountability';
 import { FileText } from 'lucide-react';
 
 interface RequisitionItemOption {
@@ -22,9 +23,13 @@ type Mode = 'view' | 'create' | 'edit';
 export function AccountabilitySection({ requisitionId, requisitionItems, fileBaseUrl }: Props) {
   const [mode, setMode] = useState<Mode>('view');
 
-  const { data, loading, error, refetch } = useQuery(GET_ACCOUNTABILITIES, {
+  const { data, loading, error, refetch } = useQuery<
+    { accountabilities: Accountability[] },
+    AccountabilitiesVars
+  >(GET_ACCOUNTABILITIES, {
     variables: { requisitionId, limit: 1 },
   });
+ 
 
   const accountability = data?.accountabilities?.[0] ?? null;
 

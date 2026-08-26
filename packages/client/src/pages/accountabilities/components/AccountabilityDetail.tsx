@@ -81,7 +81,10 @@ function FileLink({ label, name, baseUrl }: { label: string; name: string | null
 }
 
 export function AccountabilityDetail({ id, onBack, onEdit, fileBaseUrl }: Props) {
-  const { data, loading, error, refetch } = useQuery(ACCOUNTABILITY_QUERY, { variables: { id } });
+  const { data, loading, error, refetch } = useQuery<
+    { accountability: Accountability | null },
+    { id: string }
+  >(ACCOUNTABILITY_QUERY, { variables: { id } });
 
   const { auth } = useAuthContext();
   const permissions = getPermissionsFromToken(auth?.access_token);
@@ -90,7 +93,10 @@ export function AccountabilityDetail({ id, onBack, onEdit, fileBaseUrl }: Props)
   const [pendingAction, setPendingAction] = useState<AccountabilityStatus | null>(null);
   const [reviewNotes, setReviewNotes] = useState('');
 
-  const [updateStatus, { loading: updatingStatus }] = useMutation(UPDATE_ACCOUNTABILITY_STATUS, {
+  const [updateStatus, { loading: updatingStatus }] = useMutation<
+    { updateAccountabilityStatus: { id: string; status: string } },
+    { id: string; status: string; notes?: string }
+  >(UPDATE_ACCOUNTABILITY_STATUS, {
     refetchQueries: ['Requisitions'],
     onCompleted: () => {
       toast.success('Accountability updated successfully');
