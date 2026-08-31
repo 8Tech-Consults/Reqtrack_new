@@ -13,6 +13,15 @@ const accountabilitiesTypeDefs = `#graphql
     sortOrder: Int
   }
 
+  enum StatusEnum {
+    Draft
+    Pending
+    Reviewed
+    Amend
+    Rejected
+    Closed
+  }
+
   type AccountabilityRecord {
     id: ID!
     requisitionId: ID!

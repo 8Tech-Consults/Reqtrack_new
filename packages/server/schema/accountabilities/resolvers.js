@@ -4,7 +4,7 @@ import saveUpload from '../../helpers/saveUpload.js';
 import { db } from '../../config/config.js';
 import checkPermission from '../../helpers/checkPermission.js';
 
-const REVIEW_STATUSES = ['Closed', 'Additional Info Requested'];
+const REVIEW_STATUSES = ['Closed', 'Amend'];
 
 const toNumber = (value, fallback = 0) => {
   const parsed = Number(value);
@@ -264,6 +264,8 @@ const accountabilityResolvers = {
     updateAccountabilityStatus: async (_parent, { id, status, notes }, context) => {
       const userId = context?.req?.user?.id;
       const userPermissions = context?.req?.user?.permissions;
+
+      console.log('status', status)
 
       if (REVIEW_STATUSES.includes(status)) {
         checkPermission(

@@ -12,6 +12,7 @@ import hasPermission from "../../helpers/hasPermission.js";
 import { getRoles } from "../role/resolvers.js";
 import { fetchStaff } from "../staff/resolvers.js";
 import sendEmail from "../../utils/emails/email_server.js";
+import checkPasswordStrength from "../../helpers/password_strength.js";
 
 const ensureAnyPermission = (userPermissions, keys, message) => {
   const isAllowed = keys.some((key) => hasPermission(userPermissions, key));
@@ -377,6 +378,12 @@ const userResolvers = {
         if (usernameExists && !id)
           throw new GraphQLError("Username already exists!");
 
+        // enforce password strength before hashing
+        const { isValid, errors } = checkPasswordStrength(password);
+        if (!isValid) {
+          throw new GraphQLError(errors.join(", "));
+        }
+
         // generate unique password for employee
         const salt = await bcrypt.genSalt();
         const hashedPwd = await bcrypt.hash(password, salt);
@@ -491,7 +498,7 @@ const userResolvers = {
         if (!normalizedDistrict) {
           throw new GraphQLError("District is required.");
         }
-        if (!normalizedPremisesLocation) {
+        if (!isUpdate && !normalizedPremisesLocation) {
           throw new GraphQLError("Premises location is required.");
         }
 
@@ -522,6 +529,15 @@ const userResolvers = {
           });
           if (existingByUsername && String(existingByUsername.id) !== String(id)) {
             throw new GraphQLError("Username already exists!");
+          }
+        }
+
+        // Enforce password strength — required for new users; on updates it
+        // only applies when the caller is actually setting a new password.
+        if (!isUpdate || password) {
+          const { isValid, errors } = checkPasswordStrength(password);
+          if (!isValid) {
+            throw new GraphQLError(errors.join(", "));
           }
         }
 

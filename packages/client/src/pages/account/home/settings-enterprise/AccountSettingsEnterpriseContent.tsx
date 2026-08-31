@@ -1,5 +1,4 @@
 import { DataImport } from '../company-profile';
-import { CalendarAccounts } from '../user-profile';
 import { TrustedDevices } from '../../security/overview/blocks';
 import {
   Account,
@@ -21,8 +20,6 @@ const AccountSettingsEnterpriseContent = () => {
             <Account title="Account" />
 
             <AuthTwoFactor />
-
-            <CalendarAccounts />
 
             <DataImport />
 

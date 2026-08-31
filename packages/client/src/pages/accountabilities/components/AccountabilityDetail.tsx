@@ -125,7 +125,8 @@ export function AccountabilityDetail({ id, onBack, onEdit, fileBaseUrl }: Props)
   const a = data?.accountability;
   if (!a) return <p className="text-sm text-slate-400">Not found.</p>;
 
-  const isEditable = a.status === 'Draft' || a.status === 'Rejected' || a.status === 'Additional Info Requested';
+  const isEditable = a.status === 'Draft' || a.status === 'Rejected' || a.status === 'Amend';
+  const canSubmit = !canReviewAccountability && a.status == 'Draft';
   const canReview = canReviewAccountability && a.status !== 'Draft' && a.status !== 'Closed';
   console.log('AccountabilityDetail: canReviewAccountability', canReviewAccountability, 'canReview', canReview, 'status', a.status);
 
@@ -214,6 +215,23 @@ export function AccountabilityDetail({ id, onBack, onEdit, fileBaseUrl }: Props)
         ))}
       </div>
 
+      {canSubmit && (
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={confirmReview}
+            disabled={updatingStatus || (pendingAction === 'Amend' && !reviewNotes.trim())}
+            className={`rounded-lg px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50 ${
+              pendingAction === 'Amend' ? 'bg-amber-600 hover:bg-amber-700' : 'bg-green-600 hover:bg-green-700'
+            }`}
+          >
+            {updatingStatus ? 'Submitting...' : `Submit Accountability `}
+          </button>
+        </div>
+      ) 
+
+      }
+
        {canReview && (
         <div className="rounded-lg border border-slate-200 p-4 space-y-3">
           <h3 className="text-sm font-semibold text-slate-900">Review</h3>
@@ -221,7 +239,7 @@ export function AccountabilityDetail({ id, onBack, onEdit, fileBaseUrl }: Props)
           {pendingAction ? (
             <div className="space-y-3">
               <p className="text-sm font-medium text-slate-700">
-                {pendingAction === 'Additional Info Requested'
+                {pendingAction === 'Amend'
                   ? 'Describe what additional information is needed:'
                   : 'Add closing notes (optional):'}
               </p>
@@ -243,9 +261,9 @@ export function AccountabilityDetail({ id, onBack, onEdit, fileBaseUrl }: Props)
                 <button
                   type="button"
                   onClick={confirmReview}
-                  disabled={updatingStatus || (pendingAction === 'Additional Info Requested' && !reviewNotes.trim())}
+                  disabled={updatingStatus || (pendingAction === 'Amend' && !reviewNotes.trim())}
                   className={`rounded-lg px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50 ${
-                    pendingAction === 'Additional Info Requested' ? 'bg-amber-600 hover:bg-amber-700' : 'bg-green-600 hover:bg-green-700'
+                    pendingAction === 'Amend' ? 'bg-amber-600 hover:bg-amber-700' : 'bg-green-600 hover:bg-green-700'
                   }`}
                 >
                   {updatingStatus ? 'Saving...' : `Confirm ${pendingAction === 'Closed' ? 'Close' : 'Request'}`}
@@ -256,7 +274,7 @@ export function AccountabilityDetail({ id, onBack, onEdit, fileBaseUrl }: Props)
             <div className="flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setPendingAction('Additional Info Requested')}
+                onClick={() => setPendingAction('Amend')}
                 className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-sm font-medium text-amber-700 hover:bg-amber-100"
               >
                 Request Additional Info

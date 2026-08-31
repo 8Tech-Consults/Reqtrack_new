@@ -1,10 +1,10 @@
 export type AccountabilityStatus =
   | 'Draft'
-  | 'Submitted'
+  | 'Pending'
   | 'Under Review'
   | 'Approved'
   | 'Rejected'
-  | 'Additional Info Requested'
+  | 'Amend'
   | 'Closed';
 
 export interface AccountabilitiesVars {

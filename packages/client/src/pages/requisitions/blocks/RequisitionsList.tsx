@@ -36,7 +36,7 @@ export const formatMoney = (value: number) =>
 export type RequisitionStatus =
   | 'Draft'
   | 'Pending'
-  | 'Submitted'
+  | 'Pending'
   | 'Accepted'
   | 'Approved'
   | 'Rejected'

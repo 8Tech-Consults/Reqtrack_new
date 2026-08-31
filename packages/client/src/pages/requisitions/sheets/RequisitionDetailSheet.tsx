@@ -8,6 +8,8 @@ import { useAuthContext } from '@/auth';
 import { getPermissionsFromToken } from '@/utils/permissions';
 import { toAbsoluteUrl } from '@/utils';
 import { LOAD_USERS } from '@/gql/queries';
+import { GET_ACCOUNTABILITIES } from '@/gql/accountabilities';
+import type { Accountability, AccountabilitiesVars } from '@/pages/accountabilities/accountability';
 import { useQuery} from '@apollo/client/react';
 
 type Props = {
@@ -57,6 +59,20 @@ const RequisitionDetailSheet = ({ open, onOpenChange, detailRow, canEdit, updati
   const canAcceptRequisitions = !!perms['can_accept_requisitions'];
   const canApproveRequisitions = !!perms['can_approve_requisitions'];
   const canManageRequisitions = !!perms['can_manage_requisitions'];
+  const canReviewAccountability = !!perms['can_manage_accountabilities'];
+
+  const { data: accountabilityData } = useQuery<
+    { accountabilities: Accountability[] },
+    AccountabilitiesVars
+  >(GET_ACCOUNTABILITIES, {
+    variables: { requisitionId: detailRow?.id, limit: 1 },
+    skip: !detailRow?.id,
+    fetchPolicy: 'cache-and-network',
+  });
+  const accountability = accountabilityData?.accountabilities?.[0] ?? null;
+  // Reviewers shouldn't be sent to an accountability that doesn't exist yet
+  // or hasn't been submitted (Draft) — nothing there for them to act on.
+  const hideAccountabilityForReviewer = canReviewAccountability && (!accountability || accountability.status === 'Draft');
 
   const handleAction = (status: RequisitionStatus) => {
     if (status === 'Rejected' || status === ('Amendment Requested' as RequisitionStatus)) {
@@ -427,7 +443,7 @@ const RequisitionDetailSheet = ({ open, onOpenChange, detailRow, canEdit, updati
             const actionColour: Record<string, string> = {
               Approved: 'bg-green-500',
               Rejected: 'bg-rose-500',
-              Submitted: 'bg-blue-500',
+              Pending: 'bg-blue-500',
               'Amendment Requested': 'bg-amber-500',
             };
             return (
@@ -455,7 +471,7 @@ const RequisitionDetailSheet = ({ open, onOpenChange, detailRow, canEdit, updati
           })()}
 
           {/* — Accountability — */}
-          {(detailRow.status === 'Approved' || detailRow.status === 'Closed') && (
+          {(detailRow.status === 'Approved' || detailRow.status === 'Closed') && !hideAccountabilityForReviewer && (
             <section className="space-y-3">
               <div className="flex items-center gap-2 pb-1 border-b">
                 <div className="p-1.5 bg-blue-50 rounded text-blue-600"><Receipt size={15} /></div>
@@ -519,8 +535,8 @@ const RequisitionDetailSheet = ({ open, onOpenChange, detailRow, canEdit, updati
                   {/* <button
                     type="button"
                     className="btn btn-light w-full"
-                    onClick={() => handleAction('Submitted')}
-                    disabled={updatingStatus || detailRow.status === 'Submitted'}
+                    onClick={() => handleAction('Pending')}
+                    disabled={updatingStatus || detailRow.status === 'Pending'}
                   >
                     Submit
                   </button> */}
