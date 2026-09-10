@@ -2,6 +2,9 @@ import { GraphQLError } from 'graphql';
 import saveData from '../../utils/db/saveData.js';
 import saveUpload from '../../helpers/saveUpload.js';
 import { db } from '../../config/config.js';
+import checkPermission from '../../helpers/checkPermission.js';
+
+const REVIEW_STATUSES = ['Closed', 'Amend'];
 
 const toNumber = (value, fallback = 0) => {
   const parsed = Number(value);
@@ -260,6 +263,25 @@ const accountabilityResolvers = {
 
     updateAccountabilityStatus: async (_parent, { id, status, notes }, context) => {
       const userId = context?.req?.user?.id;
+      const userPermissions = context?.req?.user?.permissions;
+
+      console.log('status', status)
+
+      if (REVIEW_STATUSES.includes(status)) {
+        checkPermission(
+          userPermissions,
+          'can_review_accountability',
+          'You do not have permission to review accountabilities'
+        );
+      }
+
+      const [[current]] = await db.execute(
+        `SELECT requisition_id FROM accountability_records WHERE id = ? LIMIT 1`,
+        [id]
+      );
+      if (!current) {
+        throw new GraphQLError('Accountability record not found.', { extensions: { code: 'NOT_FOUND' } });
+      }
 
       const updateFields = [
         'status = ?',
@@ -271,7 +293,7 @@ const accountabilityResolvers = {
         updateFields.push('review_notes = ?');
         values.push(notes);
       }
-      if (userId && (status === 'Reviewed' || status === 'Approved')) {
+      if (userId && (status === 'Reviewed' || status === 'Approved' || REVIEW_STATUSES.includes(status))) {
         updateFields.push('reviewed_by = ?', 'reviewed_at = CURRENT_TIMESTAMP');
         values.push(userId);
       }
@@ -282,14 +304,17 @@ const accountabilityResolvers = {
         values
       );
 
+      if (status === 'Closed' && current.requisition_id) {
+        await db.execute(
+          `UPDATE requisitions SET status = 'Closed', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND deleted = 0`,
+          [current.requisition_id]
+        );
+      }
+
       const [[updated]] = await db.execute(
         `SELECT * FROM accountability_records WHERE id = ? LIMIT 1`,
         [id]
       );
-
-      if (!updated) {
-        throw new GraphQLError('Accountability record not found.', { extensions: { code: 'NOT_FOUND' } });
-      }
 
       return mapRecord(updated);
     },

@@ -49,6 +49,8 @@ const RequisitionFormSheet = ({ open, onOpenChange, initialValues, onSave, savin
     [programOptions, projectYearId]
   );
 
+  const isAdminProgram = selectedProgram?.type === 'Admin';
+
   const outcomeOptions = useMemo(() => selectedProgram?.outcomes || [], [selectedProgram]);
 
   const selectedOutcome = useMemo(
@@ -71,6 +73,21 @@ const RequisitionFormSheet = ({ open, onOpenChange, initialValues, onSave, savin
   );
 
   const budgetLineOptions = useMemo(() => selectedActivity?.budgetLines || [], [selectedActivity]);
+
+  // Admin-type programs have exactly one hidden outcome/output pair (created by
+  // the server). Skip asking the user to pick them - auto-select so the flow
+  // is just Program -> Activity.
+  useEffect(() => {
+    if (!isAdminProgram) return;
+    const hiddenOutcomeId = outcomeOptions[0]?.id || '';
+    if (hiddenOutcomeId && hiddenOutcomeId !== outcomeId) setOutcomeId(hiddenOutcomeId);
+  }, [isAdminProgram, outcomeOptions, outcomeId]);
+
+  useEffect(() => {
+    if (!isAdminProgram) return;
+    const hiddenOutputId = outputOptions[0]?.id || '';
+    if (hiddenOutputId && hiddenOutputId !== outputId) setOutputId(hiddenOutputId);
+  }, [isAdminProgram, outputOptions, outputId]);
 
   useEffect(() => {
     if (!open) return;
@@ -183,27 +200,31 @@ const RequisitionFormSheet = ({ open, onOpenChange, initialValues, onSave, savin
                 ))}
               </select>
             </div>
-            <div>
-              <label className="label-text font-medium">Outcome</label>
-              <select className="select select-bordered w-full" value={outcomeId} onChange={(e) => { setOutcomeId(e.target.value); setOutputId(''); setActivityId(''); setBudgetLineId(''); }} disabled={!projectYearId}>
-                <option value="">Select outcome</option>
-                {outcomeOptions.map((option) => (
-                  <option key={option.id} value={option.id}>{option.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="label-text font-medium">Output</label>
-              <select className="select select-bordered w-full" value={outputId} onChange={(e) => { setOutputId(e.target.value); setActivityId(''); setBudgetLineId(''); }} disabled={!outcomeId}>
-                <option value="">Select output</option>
-                {outputOptions.map((option) => (
-                  <option key={option.id} value={option.id}>{option.name}</option>
-                ))}
-              </select>
-            </div>
+            {!isAdminProgram && (
+              <div>
+                <label className="label-text font-medium">Outcome</label>
+                <select className="select select-bordered w-full" value={outcomeId} onChange={(e) => { setOutcomeId(e.target.value); setOutputId(''); setActivityId(''); setBudgetLineId(''); }} disabled={!projectYearId}>
+                  <option value="">Select outcome</option>
+                  {outcomeOptions.map((option) => (
+                    <option key={option.id} value={option.id}>{option.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {!isAdminProgram && (
+              <div>
+                <label className="label-text font-medium">Output</label>
+                <select className="select select-bordered w-full" value={outputId} onChange={(e) => { setOutputId(e.target.value); setActivityId(''); setBudgetLineId(''); }} disabled={!outcomeId}>
+                  <option value="">Select output</option>
+                  {outputOptions.map((option) => (
+                    <option key={option.id} value={option.id}>{option.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div>
               <label className="label-text font-medium">Activity</label>
-              <select className="select select-bordered w-full" value={activityId} onChange={(e) => { setActivityId(e.target.value); setBudgetLineId(''); }} disabled={!outputId}>
+              <select className="select select-bordered w-full" value={activityId} onChange={(e) => { setActivityId(e.target.value); setBudgetLineId(''); }} disabled={isAdminProgram ? !projectYearId : !outputId}>
                 <option value="">Select activity</option>
                 {activityOptions.map((option) => (
                   <option key={option.id} value={option.id}>{option.name}</option>

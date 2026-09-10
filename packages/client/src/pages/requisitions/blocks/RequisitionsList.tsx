@@ -36,12 +36,13 @@ export const formatMoney = (value: number) =>
 export type RequisitionStatus =
   | 'Draft'
   | 'Pending'
-  | 'Submitted'
+  | 'Pending'
   | 'Accepted'
   | 'Approved'
   | 'Rejected'
   | 'Amendment Requested'
-  | 'Amended';
+  | 'Amended'
+  | 'Closed';
 
 export type RequisitionItem = {
   id: string;
@@ -108,6 +109,7 @@ const RequisitionsList = ({
     Approved: 'border-green-200 bg-green-50 text-green-700',
     Rejected: 'border-rose-200 bg-rose-50 text-rose-700',
     'Amendment Requested': 'border-amber-200 bg-amber-50 text-amber-700',
+    Closed: 'border-slate-300 bg-slate-200 text-slate-700',
   };
 
   useEffect(() => {

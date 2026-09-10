@@ -1,78 +1,41 @@
-import { KeenIcon } from '@/components';
-
-import { CrudAvatarUpload } from '@/partials/crud';
+import { useAuthContext } from '@/auth';
+import { toAbsoluteUrl } from '@/utils';
+import { URL_2 } from '@/config/urls';
 
 const PersonalInfo = () => {
+  const { currentUser } = useAuthContext();
+
+  const avatarSrc = currentUser?.image
+    ? `${URL_2}/imgs/${currentUser.image}`
+    : toAbsoluteUrl('/media/avatars/blank.png');
+
   return (
     <div className="card min-w-full">
-      <div className="card-header">
-        <h3 className="card-title">Personal Info</h3>
-      </div>
-      <div className="card-table scrollable-x-auto pb-3">
-        <table className="table align-middle text-sm text-gray-500">
-          <tbody>
-            <tr>
-              <td className="py-2 min-w-28 text-gray-600 font-normal">Photo</td>
-              <td className="py-2 text-gray700 font-normal min-w-32 text-2sm">
-                150x150px JPEG, PNG Image
-              </td>
-              <td className="py-2 text-center">
-                <div className="flex justify-center items-center">
-                  <CrudAvatarUpload />
-                </div>
-              </td>
-            </tr>
-            <tr>
-              <td className="py-2 text-gray-600 font-normal">Name</td>
-              <td className="py-2 text-gray-800 font-normaltext-sm">Jason Tatum</td>
-              <td className="py-2 text-center">
-                <a href="#" className="btn btn-sm btn-icon btn-clear btn-primary">
-                  <KeenIcon icon="notepad-edit" />
-                </a>
-              </td>
-            </tr>
-            <tr>
-              <td className="py-3 text-gray-600 font-normal">Availability</td>
-              <td className="py-3 text-gray-800 font-normal">
-                <span className="badge badge-sm badge-outline badge-success">Available now</span>
-              </td>
-              <td className="py-3 text-center">
-                <a href="#" className="btn btn-sm btn-icon btn-clear btn-primary">
-                  <KeenIcon icon="notepad-edit" />
-                </a>
-              </td>
-            </tr>
-            <tr>
-              <td className="py-3 text-gray-600 font-normal">Birthday</td>
-              <td className="py-3 text-gray-700 text-sm font-normal">28 May 1996</td>
-              <td className="py-3 text-center">
-                <a href="#" className="btn btn-sm btn-icon btn-clear btn-primary">
-                  <KeenIcon icon="notepad-edit" />
-                </a>
-              </td>
-            </tr>
-            <tr>
-              <td className="py-3 text-gray-600 font-normal">Gender</td>
-              <td className="py-3 text-gray-700 text-sm font-normal">Male</td>
-              <td className="py-3 text-center">
-                <a href="#" className="btn btn-sm btn-icon btn-clear btn-primary">
-                  <KeenIcon icon="notepad-edit" />
-                </a>
-              </td>
-            </tr>
-            <tr>
-              <td className="py-3">Address</td>
-              <td className="py-3 text-gray-700 text-2sm font-normal">
-                You have no an address yet
-              </td>
-              <td className="py-3 text-center">
-                <a href="#" className="btn btn-link btn-sm">
-                  Add
-                </a>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <div className="card-body flex flex-col items-center text-center gap-3 py-7.5">
+        <img
+          src={avatarSrc}
+          alt={currentUser?.name || currentUser?.username || 'User avatar'}
+          className="size-20 rounded-full object-cover border border-gray-200"
+        />
+        <div>
+          <h3 className="text-base font-semibold text-gray-900">
+            {currentUser?.name || currentUser?.username || '—'}
+          </h3>
+          <p className="text-sm text-gray-500">@{currentUser?.username}</p>
+        </div>
+        {currentUser?.role_name && (
+          <span className="badge badge-sm badge-primary badge-outline">{currentUser.role_name}</span>
+        )}
+        <div className="w-full border-t border-gray-100 pt-4 mt-1 space-y-2 text-left">
+          <div className="flex items-center justify-between text-sm gap-2">
+            <span className="text-gray-500 shrink-0">Email</span>
+            <span className="text-gray-800 font-medium truncate">{currentUser?.email || '—'}</span>
+          </div>
+          <div className="flex items-center justify-between text-sm gap-2">
+            <span className="text-gray-500 shrink-0">District</span>
+            <span className="text-gray-800 font-medium truncate">{currentUser?.district || '—'}</span>
+          </div>
+        </div>
       </div>
     </div>
   );

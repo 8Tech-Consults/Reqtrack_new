@@ -7,18 +7,18 @@ export interface AuthModel {
 }
 
 export interface UserModel {
-  id: number;
+  id: number | string;
   username: string;
-  password: string | undefined;
+  name: string;
   email: string;
-  first_name: string;
-  last_name: string;
-  fullname?: string;
-  occupation?: string;
-  companyName?: string;
-  phone?: string;
-  roles?: number[];
-  pic?: string;
+  district?: string | null;
+  phone_number?: string | null;
+  image?: string | null;
+  role_id?: string | null;
+  role_name?: string | null;
+  must_change_password?: boolean;
+  created_at?: string;
+  updated_at?: string;
   language?: TLanguageCode;
   auth?: AuthModel;
 }

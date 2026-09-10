@@ -107,9 +107,11 @@ const UserFormDialog = ({
     password: "",
     roleId: "",
   });
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     if (open) {
+      setShowPassword(false);
       setForm({
         id: String(initialValues?.id ?? ""),
         username: initialValues?.username ?? "",
@@ -312,12 +314,23 @@ const UserFormDialog = ({
               <label className="text-sm font-medium text-gray-700 mb-1 block">
                 Password
               </label>
-              <Input
-                type="password"
-                value={form.password}
-                onChange={(e) => setForm({ ...form, password: e.target.value })}
-                required={!isEditing}
-              />
+              <div className="relative">
+                <Input
+                  type={showPassword ? "text" : "password"}
+                  value={form.password}
+                  onChange={(e) => setForm({ ...form, password: e.target.value })}
+                  required={!isEditing}
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-500"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  <KeenIcon icon={showPassword ? "eye-slash" : "eye"} />
+                </button>
+              </div>
             </div>
             {/* )} */}
           </div>

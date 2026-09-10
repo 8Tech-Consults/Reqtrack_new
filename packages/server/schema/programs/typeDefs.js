@@ -1,4 +1,9 @@
 const programsTypeDefs = `#graphql
+  enum ProgramType {
+    Activity
+    Admin
+  }
+
   type ProgramManager {
     id: ID!
     name: String!
@@ -45,6 +50,7 @@ const programsTypeDefs = `#graphql
     programManagerId: ID
     programManagerName: String
     status: String!
+    type: ProgramType!
     createdAt: String!
     outcomes: [ProgramOutcome!]!
   }
@@ -99,6 +105,7 @@ const programsTypeDefs = `#graphql
     budgetAmount: Float!
     programManagerId: ID
     status: String
+    type: ProgramType
   }
 
   input SaveProgramStructureInput {

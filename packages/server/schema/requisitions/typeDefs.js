@@ -30,6 +30,7 @@ const requisitionsTypeDefs = `#graphql
     AmendmentRequested
     Accepted
     Amended
+    Closed
   }
 
   type RequisitionItem {

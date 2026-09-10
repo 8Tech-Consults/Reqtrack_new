@@ -16,7 +16,7 @@ const Header = () => {
       <Container className="flex items-center justify-between flex-wrap gap-3">
         <Link to="/">
           <img
-            src={toAbsoluteUrl('/media/app/mini-logo-gray.svg')}
+            src={toAbsoluteUrl('/media/logos/logo.png')}
             className="dark:hidden min-h-[30px]"
           />
           <img

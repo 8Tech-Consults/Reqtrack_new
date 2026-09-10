@@ -88,7 +88,7 @@ const SidebarPrimary = () => {
       <div ref={headerRef} className="hidden lg:flex items-center justify-center shrink-0">
         <Link to="/">
           <img
-            src={toAbsoluteUrl('/media/app/mini-logo-gray.svg')}
+            src={toAbsoluteUrl('/media/logos/logo.png')}
             className="dark:hidden min-h-[30px]"
           />
           <img

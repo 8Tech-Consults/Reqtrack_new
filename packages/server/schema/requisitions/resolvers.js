@@ -62,8 +62,8 @@ const getRequisitions = async ({ limit, offset, search, userId, canApproveRequis
   let where = 'WHERE r.deleted = 0';
 
   if (canApproveRequisitions) {
-    where += ' AND r.status IN (?, ?)';
-    values.push('Approved', 'Accepted');
+    where += ' AND r.status IN (?, ?, ?)';
+    values.push('Approved', 'Accepted', 'Closed');
   }
 
    if (userId) {

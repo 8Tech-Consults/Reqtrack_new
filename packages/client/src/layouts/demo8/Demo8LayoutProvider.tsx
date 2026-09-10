@@ -4,8 +4,10 @@ import { useMenus } from '@/providers';
 import { ILayoutConfig, useLayout } from '@/providers';
 import { deepMerge } from '@/utils';
 import { Demo8LayoutConfig } from '.';
-import { useMenuChildren } from '@/components';
+import { TMenuConfig, useMenuChildren } from '@/components';
 import { useLocation } from 'react-router';
+import { getPermissionsFromToken } from '@/utils/permissions';
+import { useAuthContext } from '@/auth/useAuthContext';
 
 // Interface defining the properties of the layout provider context
 export interface IDemo8LayoutProviderProps {
@@ -23,12 +25,42 @@ const initalLayoutProps: IDemo8LayoutProviderProps = {
   }
 };
 
+const filterMenuByPermissions = (
+  items: TMenuConfig,
+  permissions: Record<string, boolean>
+): TMenuConfig => {
+  const filtered: TMenuConfig = [];
+
+  for (const item of items) {
+    const required = item.requiredPermissions || [];
+    const requiredAny = item.requiredAnyPermissions || [];
+
+    const hasRequired = required.every((key) => Boolean(permissions[key]));
+    const hasAny = requiredAny.length === 0 || requiredAny.some((key) => Boolean(permissions[key]));
+    const keepSelf = hasRequired && hasAny;
+
+    if (Array.isArray(item.children) && item.children.length > 0) {
+      const children = filterMenuByPermissions(item.children, permissions);
+      if (keepSelf && children.length > 0) {
+        filtered.push({ ...item, children });
+      }
+      continue;
+    }
+
+    if (keepSelf) {
+      filtered.push(item);
+    }
+  }
+
+  return filtered;
+};
+
 // Create a context to manage the layout-related state and logic for Demo8 layout
 const Demo8LayoutContext = createContext<IDemo8LayoutProviderProps>(initalLayoutProps);
 
 // Custom hook to access the layout context in other components
 const useDemo8Layout = () => useContext(Demo8LayoutContext);
-
+ 
 // Provider component that sets up the layout state and context for Demo8 layout
 const Demo8LayoutProvider = ({ children }: PropsWithChildren) => {
   const { pathname } = useLocation(); // Gets the current path
@@ -42,10 +74,16 @@ const Demo8LayoutProvider = ({ children }: PropsWithChildren) => {
   const [layout] = useState(layoutConfig); // Layout configuration is stored in state
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false); // Manage state for mobile sidebar
 
+  
+  const { auth } = useAuthContext();
+  const permissions = getPermissionsFromToken(auth?.access_token);
+  const filteredPrimaryMenu = filterMenuByPermissions(MENU_SIDEBAR, permissions);
+  const secondaryMenu = useMenuChildren(pathname, filteredPrimaryMenu, 0); // Retrieves the secondary menu
+
   // Set the menu configuration for the primary menu using the provided MENU_SIDEBAR configuration
-  setMenuConfig('primary', MENU_SIDEBAR);
+  setMenuConfig('primary', filteredPrimaryMenu);
   setMenuConfig('mega', MENU_MEGA);
-  const secondaryMenu = useMenuChildren(pathname, MENU_SIDEBAR, 0); // Retrieves the secondary menu
+  // const secondaryMenu = useMenuChildren(pathname, MENU_SIDEBAR, 0); // Retrieves the secondary menu
   setMenuConfig('secondary', secondaryMenu);
 
   // When the layout state changes, set the current layout configuration in the layout provider

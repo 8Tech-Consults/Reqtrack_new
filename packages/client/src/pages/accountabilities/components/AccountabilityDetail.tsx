@@ -1,8 +1,14 @@
+import { useState } from 'react';
 import { gql } from '@apollo/client';
-import { useQuery} from '@apollo/client/react';
+import { useQuery, useMutation } from '@apollo/client/react';
+import { toast } from 'sonner';
 import { StatusBadge } from './StatusBadge';
 import { Pencil, ArrowLeft } from 'lucide-react';
-import type { Accountability } from '../accountability';
+import type { Accountability, AccountabilityStatus } from '../accountability';
+import { UPDATE_ACCOUNTABILITY_STATUS } from '@/gql/accountabilities';
+import { useAuthContext } from '@/auth';
+import { getPermissionsFromToken } from '@/utils/permissions';
+import { toFriendlyErrorMessage } from '@/utils';
 
 const ACCOUNTABILITY_QUERY = gql`
   query Accountability($id: ID!) {
@@ -75,10 +81,43 @@ function FileLink({ label, name, baseUrl }: { label: string; name: string | null
 }
 
 export function AccountabilityDetail({ id, onBack, onEdit, fileBaseUrl }: Props) {
-  const { data, loading, error } = useQuery<
+  const { data, loading, error, refetch } = useQuery<
     { accountability: Accountability | null },
     { id: string }
   >(ACCOUNTABILITY_QUERY, { variables: { id } });
+
+  const { auth } = useAuthContext();
+  const permissions = getPermissionsFromToken(auth?.access_token);
+  const canReviewAccountability = Boolean(permissions.can_review_accountability);
+
+  const [pendingAction, setPendingAction] = useState<AccountabilityStatus | null>(null);
+  const [reviewNotes, setReviewNotes] = useState('');
+
+  const [updateStatus, { loading: updatingStatus }] = useMutation<
+    { updateAccountabilityStatus: { id: string; status: string } },
+    { id: string; status: string; notes?: string }
+  >(UPDATE_ACCOUNTABILITY_STATUS, {
+    refetchQueries: ['Requisitions'],
+    onCompleted: () => {
+      toast.success('Accountability updated successfully');
+      setPendingAction(null);
+      setReviewNotes('');
+      refetch();
+    },
+    onError: (err) => {
+      toast.error(toFriendlyErrorMessage(err, 'Unable to update this accountability. Please try again.'));
+    },
+  });
+
+  const confirmReview = () => {
+    if (!pendingAction) return;
+    updateStatus({ variables: { id, status: pendingAction, notes: reviewNotes.trim() || undefined } });
+  };
+
+  const cancelReview = () => {
+    setPendingAction(null);
+    setReviewNotes('');
+  };
 
   if (loading) return <p className="text-sm text-slate-400">Loading...</p>;
   if (error) return <p className="text-sm text-red-600">Couldn't load this accountability. {error.message}</p>;
@@ -86,7 +125,10 @@ export function AccountabilityDetail({ id, onBack, onEdit, fileBaseUrl }: Props)
   const a = data?.accountability;
   if (!a) return <p className="text-sm text-slate-400">Not found.</p>;
 
-  const isEditable = a.status === 'Draft' || a.status === 'Rejected';
+  const isEditable = a.status === 'Draft' || a.status === 'Rejected' || a.status === 'Amend';
+  const canSubmit = !canReviewAccountability && a.status == 'Draft';
+  const canReview = canReviewAccountability && a.status !== 'Draft' && a.status !== 'Closed';
+  console.log('AccountabilityDetail: canReviewAccountability', canReviewAccountability, 'canReview', canReview, 'status', a.status);
 
   return (
     <div className="space-y-6">
@@ -172,6 +214,83 @@ export function AccountabilityDetail({ id, onBack, onEdit, fileBaseUrl }: Props)
           </div>
         ))}
       </div>
+
+      {canSubmit && (
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={confirmReview}
+            disabled={updatingStatus || (pendingAction === 'Amend' && !reviewNotes.trim())}
+            className={`rounded-lg px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50 ${
+              pendingAction === 'Amend' ? 'bg-amber-600 hover:bg-amber-700' : 'bg-green-600 hover:bg-green-700'
+            }`}
+          >
+            {updatingStatus ? 'Submitting...' : `Submit Accountability `}
+          </button>
+        </div>
+      ) 
+
+      }
+
+       {canReview && (
+        <div className="rounded-lg border border-slate-200 p-4 space-y-3">
+          <h3 className="text-sm font-semibold text-slate-900">Review</h3>
+
+          {pendingAction ? (
+            <div className="space-y-3">
+              <p className="text-sm font-medium text-slate-700">
+                {pendingAction === 'Amend'
+                  ? 'Describe what additional information is needed:'
+                  : 'Add closing notes (optional):'}
+              </p>
+              <textarea
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                rows={3}
+                placeholder="Enter notes..."
+                value={reviewNotes}
+                onChange={(e) => setReviewNotes(e.target.value)}
+              />
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={cancelReview}
+                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmReview}
+                  disabled={updatingStatus || (pendingAction === 'Amend' && !reviewNotes.trim())}
+                  className={`rounded-lg px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50 ${
+                    pendingAction === 'Amend' ? 'bg-amber-600 hover:bg-amber-700' : 'bg-green-600 hover:bg-green-700'
+                  }`}
+                >
+                  {updatingStatus ? 'Saving...' : `Confirm ${pendingAction === 'Closed' ? 'Close' : 'Request'}`}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingAction('Amend')}
+                className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-sm font-medium text-amber-700 hover:bg-amber-100"
+              >
+                Request Additional Info
+              </button>
+              <button
+                type="button"
+                onClick={() => setPendingAction('Closed')}
+                className="rounded-lg bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700"
+              >
+                Close Accountability
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
     </div>
   );
 }

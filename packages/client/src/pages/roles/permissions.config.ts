@@ -13,23 +13,7 @@ export type ModuleConfig = {
 };
 
 export const MODULES_CONFIG: ModuleConfig[] = [
-  {
-    id: "system_configuration",
-    name: "System Administration",
-    icon: ShieldCheck,
-    permissions: [
-      { id: "can_create_users", label: "Can Create Users" },
-      { id: "can_manage_users", label: "Can Manage Users" },
-      { id: "can_manage_roles", label: "Can Manage Roles" },
-      { id: "can_view_roles", label: "Can View Roles" },
-      { id: "can_create_roles", label: "Can Create or Edit Roles" },
-      { id: "can_delete_roles", label: "Can Delete Roles" },
-      {
-        id: "can_update_role_permissions",
-        label: "Can Update Role Permissions",
-      },
-    ],
-  },
+  
   {
     id: "projects",
     name: "Project Planning",
@@ -72,7 +56,8 @@ export const MODULES_CONFIG: ModuleConfig[] = [
       { id: "can_edit_accountabilities", label: "Can Edit Accountabilities" },
       { id: "can_delete_accountabilities", label: "Can Delete Accountabilities" },
       { id: "can_view_own_accountabilities", label: "Can View Own Accountabilities" },
-      { id: "can_approve_accountabilities", label: "Can Approve Accountabilities" },
+      // { id: "can_approve_accountabilities", label: "Can Approve Accountabilities" },
+      { id: "can_review_accountability", label: "Can Review Accountabilities (Close / Request Info)" },
     ],
   },
   {
@@ -86,5 +71,22 @@ export const MODULES_CONFIG: ModuleConfig[] = [
       { id: "can_edit_staff", label: "Can Edit Staff" },
       { id: "can_delete_staff", label: "Can Delete Staff" },
     ],
-  }
+  },
+  {
+    id: "system_configuration",
+    name: "System Administration",
+    icon: ShieldCheck,
+    permissions: [
+      { id: "can_create_users", label: "Can Create Users" },
+      { id: "can_manage_users", label: "Can Manage Users" },
+      { id: "can_manage_roles", label: "Can Manage Roles" },
+      { id: "can_view_roles", label: "Can View Roles" },
+      { id: "can_create_roles", label: "Can Create or Edit Roles" },
+      { id: "can_delete_roles", label: "Can Delete Roles" },
+      {
+        id: "can_update_role_permissions",
+        label: "Can Update Role Permissions",
+      },
+    ],
+  },
 ];

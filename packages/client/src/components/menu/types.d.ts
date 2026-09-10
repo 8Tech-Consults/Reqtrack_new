@@ -171,6 +171,11 @@ export interface IMenuItemConfig {
   trigger?: TMenuItemTrigger;
   children?: IMenuItemConfig[];
   childrenIndex?: number;
+
+  // Optional permission keys required to show this menu item.
+  requiredPermissions?: string[];
+  // Optional permission keys where any one grants visibility.
+  requiredAnyPermissions?: string[];
 }
 
 export type TMenuConfig = IMenuItemConfig[];
