@@ -1,68 +1,45 @@
-import { Contributions, MediaUploads } from '@/pages/public-profile/profiles/default';
-import {
-  ChannelStats,
-  EarningsChart,
-  EntryCallout,
-  Highlights,
-  TeamMeeting,
-  Teams
-} from './blocks';
 import { useQuery } from '@apollo/client/react';
 import { MONTHLYREQUISITIONEXPENSE, REQUISITIONSTATUSCHART } from '@/gql/dashboard';
 import RecentRequisitions from '../../RecentRequisition';
+import { ChannelStats, DashboardStatusChart, DisbursementChart, Highlights } from './blocks';
+import type { RequisitionStatusChart } from './blocks';
+
+const DashboardSectionHeading = ({ id, title }: { id: string; title: string }) => (
+  <h2 id={id} className="text-xl font-bold tracking-[-0.025em] text-[#172550]">{title}</h2>
+);
 
 const Demo1LightSidebarContent = () => {
-  const { data } = useQuery<{
-    requisitionStatusChart: import('@/pages/public-profile/profiles/default/blocks/Contributions').RequisitionStatusChart;
-  }>(REQUISITIONSTATUSCHART);
-  const statusData = data;
+  const year = new Date().getFullYear();
+  const statusQuery = useQuery<{ requisitionStatusChart: RequisitionStatusChart }>(REQUISITIONSTATUSCHART);
+  const expenseQuery = useQuery<{ yearExpense: Array<{ month: number; totalAmount: number }> }, { year: number }>(
+    MONTHLYREQUISITIONEXPENSE,
+    { variables: { year }, fetchPolicy: 'network-only' }
+  );
 
-  //monthly requisition expenses
-  const { data: ExpenseData } = useQuery<{
-    yearExpense: Array<{ month: number; totalAmount: number }>;
-  }, { year: number }>(MONTHLYREQUISITIONEXPENSE, {
-    variables: {
-      "year": 2026
-    },
-    fetchPolicy: 'network-only',
-  });
-// console.log('data.............', ExpenseData)
-  
   return (
-    <div className="grid gap-5 lg:gap-7.5">
-      {/* <div className="grid lg:grid-cols-3 gap-y-5 lg:gap-7.5 items-stretch"> */}
-        {/* <div className="lg:col-span-1"> */}
-          <div className="grid grid-cols-4 gap-5 lg:gap-7.5 h-full items-stretch">
-            <ChannelStats />
-          </div>
-        {/* </div> */}
-
-        {/* <div className="lg:col-span-2">
-          <EntryCallout className="h-full" />
-        </div> */}
-      {/* </div> */}
-
-      <div className="grid lg:grid-cols-3 gap-5 lg:gap-7.5 items-stretch">
-        <div className="lg:col-span-1">
-          <Contributions title="Fund Request Status Overview" statusData= {statusData} />
+    <div className="space-y-7 lg:space-y-9">
+      <section aria-labelledby="overview-heading">
+        <DashboardSectionHeading id="overview-heading" title="Overview" />
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <ChannelStats />
         </div>
+      </section>
 
-        <div className="lg:col-span-2">
-          {/* <EarningsChart /> */}
-          <MediaUploads ExpenseData={ExpenseData}/>
+      <section aria-labelledby="analytics-heading">
+        <DashboardSectionHeading id="analytics-heading" title="Analytics" />
+        <div className="mt-4 grid items-stretch gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+          <DashboardStatusChart data={statusQuery.data?.requisitionStatusChart} loading={statusQuery.loading} error={statusQuery.error} />
+          <DisbursementChart expenseData={expenseQuery.data?.yearExpense} loading={expenseQuery.loading} error={expenseQuery.error} year={year} />
         </div>
-      </div>
+      </section>
 
-      <div className="grid lg:grid-cols-3 gap-5 lg:gap-7.5 items-stretch">
-        <div className="lg:col-span-1">
-          {/* <TeamMeeting /> */}
+      <section aria-labelledby="activity-heading">
+        <DashboardSectionHeading id="activity-heading" title="Recent activity" />
+        <div className="mt-4 grid items-stretch gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.6fr)]">
           <Highlights limit={3} />
-        </div>
-
-        <div className="lg:col-span-2">
           <RecentRequisitions />
         </div>
-      </div>
+      </section>
     </div>
   );
 };

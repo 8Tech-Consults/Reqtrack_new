@@ -1,40 +1,24 @@
 import { Container } from '@/components/container';
-import { generalSettings } from '@/config';
 
 const Footer = () => {
   const currentYear = new Date().getFullYear();
 
   return (
-    <footer className="footer">
+    <footer className="mt-4 border-t border-slate-200 bg-white/70 dark:border-gray-200 dark:bg-[--tw-content-bg-dark]">
       <Container>
-        <div className="flex flex-col md:flex-row justify-center md:justify-between items-center gap-3 py-5">
-          <div className="flex order-2 md:order-1 gap-2 font-normal text-2sm">
-            <span className="text-gray-500">{currentYear} &copy;</span>
+        <div className="flex flex-col items-center justify-center gap-2 py-5 sm:flex-row sm:justify-between">
+          <div className="flex gap-2 text-xs font-medium">
+            <span className="text-slate-400">{currentYear} &copy;</span>
             <a
               href="https://8technologies.net/"
               target="_blank"
-              className="text-gray-600 hover:text-primary"
+              rel="noreferrer"
+              className="text-slate-600 transition-colors hover:text-primary"
             >
-              Eight teach consults
+              Eight Tech Consults
             </a>
           </div>
-          {/* <nav className="flex order-1 md:order-2 gap-4 font-normal text-2sm text-gray-600">
-            <a href={generalSettings.docsLink} target="_blank" className="hover:text-primary">
-              Docs
-            </a>
-            <a href={generalSettings.purchaseLink} target="_blank" className="hover:text-primary">
-              Purchase
-            </a>
-            <a href={generalSettings.faqLink} target="_blank" className="hover:text-primary">
-              FAQ
-            </a>
-            <a href="https://devs.keenthemes.com" target="_blank" className="hover:text-primary">
-              Support
-            </a>
-            <a href={generalSettings.licenseLink} target="_blank" className="hover:text-primary">
-              License
-            </a>
-          </nav> */}
+          {/* <span className="text-[11px] font-medium text-slate-400">Secure requisition workspace</span> */}
         </div>
       </Container>
     </footer>

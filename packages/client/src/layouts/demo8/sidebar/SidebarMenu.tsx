@@ -1,200 +1,166 @@
+import clsx from 'clsx';
+import { ChevronDown, ChevronRight } from 'lucide-react';
+import { Link, useLocation } from 'react-router-dom';
+import { IMenuItemConfig } from '@/components/menu';
 import { KeenIcon } from '@/components/keenicons';
 import {
-  IMenuItemConfig,
-  Menu,
-  MenuArrow,
-  TMenuConfig,
-  MenuIcon,
-  MenuItem,
-  MenuLink,
-  MenuSeparator,
-  MenuSub,
-  MenuTitle
-} from '@/components/menu';
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from '@/components/ui/dropdown-menu';
 import { useMenus } from '@/providers';
-import { useResponsive } from '@/hooks';
-import { useLanguage } from '@/i18n';
 
-const SidebarMenu = () => {
-  const isDesktop = useResponsive('up', 'lg');
+interface ISidebarMenuProps {
+  mobile?: boolean;
+  activeSection?: IMenuItemConfig | null;
+  onOpenSection?: (item: IMenuItemConfig) => void;
+}
+
+const pathMatches = (target: string | undefined, pathname: string) => {
+  if (!target) return false;
+  if (target === '/dashboard') return pathname === target;
+  return pathname === target || pathname.startsWith(`${target}/`);
+};
+
+const isMenuItemActive = (item: IMenuItemConfig, pathname: string): boolean =>
+  pathMatches(item.path, pathname) ||
+  Boolean(item.children?.some((child) => isMenuItemActive(child, pathname)));
+
+const SidebarMenu = ({ mobile = false, activeSection = null, onOpenSection }: ISidebarMenuProps) => {
+  const { pathname } = useLocation();
   const { getMenuConfig } = useMenus();
-  const primaryMenuConfig = getMenuConfig('primary') || [];
-  const { isRTL } = useLanguage();
-  const menuConfig = primaryMenuConfig;
+  const menuConfig = (getMenuConfig('primary') || []).filter((item) => !item.disabled);
 
-  const buildMenu = (items: TMenuConfig) => {
-    return items.map((item, index) => {
-      return buildMenuItemRoot(item, index);
-    });
-  };
+  if (mobile) {
+    const visibleItems = activeSection?.children?.filter((item) => !item.disabled) || menuConfig;
 
-  const buildMenuItemRoot = (item: IMenuItemConfig, index: number, level: number = 0) => {
-    if (item.children) {
-      return (
-        <MenuItem
-          key={index}
-          toggle="dropdown"
-          trigger="hover"
-          dropdownProps={{
-            placement: isRTL() ? 'right-end' : 'right-start',
-            modifiers: [
-              {
-                name: 'offset',
-                options: {
-                  offset: isRTL() ? [10, 14] : [-10, 14] // [skid, distance]
-                }
-              }
-            ]
-          }}
-        >
-          <MenuLink
-            className="
-              rounded-[9px] 
-              border 
-              border-transparent
-              menu-item-here:border-gray-200 
-              menu-item-here:bg-light 
-              menu-link-hover:bg-light  
-              menu-link-hover:border-gray-200  
-              w-[62px]
-              h-[60px]
-              flex flex-col 
-              justify-center 
-              items-center 
-              gap-1 p-2 
-              grow
-            "
-          >
-            {item.icon && (
-              <MenuIcon
-                className="
-                  menu-item-here:text-primary
-                  menu-item-active:text-primary
-                  menu-link-hover:text-primary
-                  text-gray-600
-                "
-              >
-                <KeenIcon icon={item.icon} className="text-1.5xl" />
-              </MenuIcon>
-            )}
-            <MenuTitle
-              className="
-                menu-item-here:text-primary
-                menu-item-active:text-primary
-                menu-link-hover:text-primary
-                font-medium
-                text-xs
-                text-gray-600
-              "
-            >
-              {item.title}
-            </MenuTitle>
-          </MenuLink>
-          <MenuSub className="menu-default gap-0.5 w-[220px] scrollable-y-auto lg:overflow-visible max-h-[50vh]">
-            {buildMenuChildren(item.children, level + 1)}
-          </MenuSub>
-        </MenuItem>
-      );
-    } else {
-      return (
-        <MenuItem key={index}>
-          <MenuLink
-            path={item.path}
-            className="
-              rounded-[9px] 
-              border 
-              border-transparent
-              menu-item-active:border-gray-200 
-              menu-item-active:bg-light 
-              menu-link-hover:bg-light  
-              menu-link-hover:border-gray-200
-              w-[62px]
-              h-[60px]
-              flex 
-              flex-col 
-              justify-center 
-              items-center 
-              gap-1 p-2
-            "
-          >
-            {item.icon && (
-              <MenuIcon
-                className="
-                  menu-item-here:text-primary
-                  menu-item-active:text-primary
-                  menu-link-hover:text-primary
-                  text-gray-600
-                "
-              >
-                <KeenIcon icon={item.icon} className="text-1.5xl" />
-              </MenuIcon>
-            )}
-            <MenuTitle
-              className="
-                menu-item-here:text-primary
-                menu-item-active:text-primary
-                menu-link-hover:text-primary
-                font-medium
-                text-xs
-                text-gray-600
-              "
-            >
-              {item.title}
-            </MenuTitle>
-          </MenuLink>
-        </MenuItem>
-      );
-    }
-  };
+    return (
+      <nav aria-label={activeSection ? `${activeSection.title} navigation` : 'Primary navigation'}>
+        <ul className="flex flex-col">
+          {visibleItems.map((item, index) => {
+            const active = isMenuItemActive(item, pathname);
+            const hasChildren = !activeSection && Boolean(item.children?.length);
+            const rowClass = clsx(
+              'ease-premium group flex min-h-14 w-full items-center gap-3 border-b border-slate-200/80 px-5 text-left text-[15px] font-semibold outline-none transition-[background-color,color,transform] duration-150 focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#2aaed3] active:scale-[0.99] motion-reduce:transition-none motion-reduce:transform-none',
+              active ? 'bg-[#e9f8fc] text-[#172550]' : 'text-slate-700 hover:bg-slate-50'
+            );
 
-  const buildMenuChildren = (items: TMenuConfig, level: number) => {
-    return items.map((item, index) => {
-      if (!item.disabled) {
-        return buildMenuItemChild(item, index, level);
-      }
-    });
-  };
+            return (
+              <li key={`${item.path || item.title}-${index}`}>
+                {hasChildren ? (
+                  <button type="button" className={rowClass} onClick={() => onOpenSection?.(item)}>
+                    {item.icon && (
+                      <KeenIcon icon={item.icon} className="text-lg text-[#2aaed3]" />
+                    )}
+                    <span>{item.title}</span>
+                    <ChevronRight aria-hidden="true" className="ml-auto size-4 text-slate-400" />
+                  </button>
+                ) : (
+                  <Link
+                    to={item.path || '/dashboard'}
+                    className={rowClass}
+                    aria-current={active ? 'page' : undefined}
+                  >
+                    {item.icon && (
+                      <KeenIcon icon={item.icon} className="text-lg text-[#2aaed3]" />
+                    )}
+                    <span>{item.title}</span>
+                    <ChevronRight
+                      aria-hidden="true"
+                      className="ml-auto size-4 text-slate-300 transition-transform duration-150 group-hover:translate-x-0.5 motion-reduce:transform-none"
+                    />
+                  </Link>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </nav>
+    );
+  }
 
-  const buildMenuItemChild = (item: IMenuItemConfig, index: number, level: number = 0) => {
-    if (item.separator) {
-      return <MenuSeparator key={index} />;
-    } else if (item.children) {
-      return (
-        <MenuItem
-          key={index}
-          toggle={isDesktop ? 'dropdown' : 'accordion'}
-          trigger={isDesktop ? 'hover' : 'click'}
-          dropdownProps={{
-            placement: 'right-start'
-          }}
-        >
-          <MenuLink className="grow cursor-pointer">
-            <MenuTitle>{item.title}</MenuTitle>
-            <MenuArrow>
-              <KeenIcon icon="right" className="text-3xs rtl:translate rtl:rotate-180" />
-            </MenuArrow>
-          </MenuLink>
-          <MenuSub className="menu-default gap-0.5 w-[220px] scrollable-y-auto lg:overflow-visible max-h-[50vh]">
-            {buildMenuChildren(item.children, level + 1)}
-          </MenuSub>
-        </MenuItem>
-      );
-    } else {
-      return (
-        <MenuItem key={index}>
-          <MenuLink path={item.path}>
-            <MenuTitle>{item.title}</MenuTitle>
-          </MenuLink>
-        </MenuItem>
-      );
-    }
-  };
+  const tabClass = (active: boolean) =>
+    clsx(
+      'group relative flex h-full items-center px-1 outline-none after:absolute after:inset-x-1 after:bottom-0 after:h-[4px] after:origin-center after:rounded-t-full after:bg-[#72d6ee] after:transition-transform after:duration-150 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#72d6ee]',
+      active ? 'after:scale-x-100' : 'after:scale-x-0'
+    );
+
+  const labelClass = (active: boolean) =>
+    clsx(
+      'ease-premium flex items-center gap-1.5 rounded-full px-3.5 py-2.5 text-sm font-semibold transition-[background-color,color,transform] duration-150 active:scale-[0.98] motion-reduce:transition-none motion-reduce:transform-none',
+      active
+        ? 'bg-[#0f2555] text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]'
+        : 'text-white/75 hover:bg-white/[0.07] hover:text-white'
+    );
 
   return (
-    <Menu highlight={true} multipleExpand={false} className="flex flex-col gap-2.5 grow">
-      {menuConfig && buildMenu(menuConfig)}
-    </Menu>
+    <nav aria-label="Primary navigation" className="h-full">
+      <ul className="flex h-full items-stretch gap-0.5">
+        {menuConfig.map((item, index) => {
+          const active = isMenuItemActive(item, pathname);
+          const hasChildren = Boolean(item.children?.length);
+
+          return (
+            <li key={`${item.path || item.title}-${index}`} className="flex h-full items-stretch">
+              {hasChildren ? (
+                <DropdownMenu modal={false}>
+                  <DropdownMenuTrigger asChild>
+                    <button type="button" className={tabClass(active)} aria-current={active ? 'page' : undefined}>
+                      <span className={labelClass(active)}>
+                        {item.title}
+                        <ChevronDown
+                          aria-hidden="true"
+                          className="size-3.5 text-white/60 transition-transform duration-150 group-data-[state=open]:rotate-180 motion-reduce:transform-none"
+                        />
+                      </span>
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="start"
+                    sideOffset={9}
+                    className="w-[290px] rounded-xl border-slate-200 bg-white p-2 text-[#172550] shadow-[0_18px_50px_rgba(16,35,72,0.22)] data-[state=open]:duration-150 data-[state=closed]:duration-100"
+                  >
+                    {item.children?.filter((child) => !child.disabled).map((child, childIndex) => {
+                      const childActive = isMenuItemActive(child, pathname);
+                      return (
+                        <DropdownMenuItem key={`${child.path || child.title}-${childIndex}`} asChild>
+                          <Link
+                            to={child.path || '/dashboard'}
+                            aria-current={childActive ? 'page' : undefined}
+                            className={clsx(
+                              'flex min-h-11 cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold outline-none transition-colors focus:bg-[#e9f8fc] focus:text-[#172550]',
+                              childActive ? 'bg-[#e9f8fc] text-[#172550]' : 'text-slate-600'
+                            )}
+                          >
+                            {child.icon && (
+                              <KeenIcon icon={child.icon} className="text-base text-[#2aaed3]" />
+                            )}
+                            <span>{child.title}</span>
+                            {childActive && (
+                              <span className="ml-auto size-1.5 rounded-full bg-[#2aaed3]" aria-hidden="true" />
+                            )}
+                          </Link>
+                        </DropdownMenuItem>
+                      );
+                    })}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : (
+                <Link
+                  to={item.path || '/dashboard'}
+                  className={tabClass(active)}
+                  aria-current={active ? 'page' : undefined}
+                >
+                  <span className={labelClass(active)}>{item.title}</span>
+                </Link>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
   );
 };
 
-export { SidebarMenu };
+export { SidebarMenu, isMenuItemActive };

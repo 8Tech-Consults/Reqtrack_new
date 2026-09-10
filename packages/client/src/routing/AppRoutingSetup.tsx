@@ -1,6 +1,6 @@
-import { ReactElement } from 'react';
+import { lazy, ReactElement, Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router';
-import { DefaultPage, Demo1DarkSidebarPage } from '@/pages/dashboards';
+import { Demo1DarkSidebarPage } from '@/pages/dashboards';
 import {
   ProfileActivityPage,
   ProfileBloggerPage,
@@ -88,13 +88,31 @@ import { RequisitionsListPage, AccountabilityPage } from '@/pages/requisitions';
 import { StaffsListPage } from '@/pages/staff';
 // import { AccountabilitiesPage } from '@/pages/accountabilities/AccountabilitiesPage';
 
+const DashboardPage = lazy(() =>
+  import('@/pages/dashboards/demo1/light-sidebar/Demo1LightSidebarPage').then((module) => ({
+    default: module.Demo1LightSidebarPage
+  }))
+);
+
+const DashboardRouteSkeleton = () => (
+  <div className="container-fixed animate-pulse py-6" aria-label="Loading dashboard">
+    <div className="h-8 w-48 rounded-lg bg-slate-200" />
+    <div className="mt-3 h-4 w-full max-w-md rounded bg-slate-200" />
+    <div className="mt-10 h-[120px] rounded-2xl border border-slate-200 bg-white" />
+    <div className="mt-8 grid gap-4 lg:grid-cols-3">
+      <div className="h-[390px] rounded-2xl border border-slate-200 bg-white" />
+      <div className="h-[390px] rounded-2xl border border-slate-200 bg-white lg:col-span-2" />
+    </div>
+  </div>
+);
+
 const AppRoutingSetup = (): ReactElement => {
   return (
     <Routes>
       <Route element={<RequireAuth />}>
         <Route element={<Demo8Layout />}>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="/dashboard" element={<DefaultPage />} />
+          <Route path="/dashboard" element={<Suspense fallback={<DashboardRouteSkeleton />}><DashboardPage /></Suspense>} />
           <Route path="/projects" element={<ProjectsPage />} />
           <Route path="/requisitions" element={<RequisitionsListPage />} />
           <Route path="/requisitions/:id/accountability" element={<AccountabilityPage />} />

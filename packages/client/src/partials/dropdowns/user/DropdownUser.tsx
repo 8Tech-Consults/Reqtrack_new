@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import { FormattedMessage } from 'react-intl';
 import { useAuthContext } from '@/auth';
 import { useLanguage } from '@/i18n';
-import { toAbsoluteUrl } from '@/utils';
 import { DropdownUserLanguages } from './DropdownUserLanguages';
 import { useSettings } from '@/providers/SettingsProvider';
 import { DefaultTooltip, KeenIcon } from '@/components';
@@ -23,8 +22,20 @@ interface IDropdownUserProps {
 
 const DropdownUser = ({ menuItemRef }: IDropdownUserProps) => {
   const { settings, storeSettings } = useSettings();
-  const { logout } = useAuthContext();
+  const { logout, currentUser } = useAuthContext();
   const { isRTL } = useLanguage();
+
+  const displayName =
+    currentUser?.fullname ||
+    [currentUser?.first_name, currentUser?.last_name].filter(Boolean).join(' ') ||
+    currentUser?.username ||
+    'Account';
+  const initials = displayName
+    .split(' ')
+    .map((part) => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
 
   const handleThemeMode = (event: ChangeEvent<HTMLInputElement>) => {
     const newThemeMode = event.target.checked ? 'dark' : 'light';
@@ -38,27 +49,24 @@ const DropdownUser = ({ menuItemRef }: IDropdownUserProps) => {
     return (
       <div className="flex items-center justify-between px-5 py-1.5 gap-1.5">
         <div className="flex items-center gap-2">
-          <img
-            className="size-9 rounded-full border-2 border-success"
-            src={toAbsoluteUrl('/media/avatars/300-2.png')}
-            alt=""
-          />
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#172550] text-xs font-bold text-white">
+            {initials}
+          </span>
           <div className="flex flex-col gap-1.5">
             <Link
-              to="/account/hoteme/get-stard"
+              to="/account/home/user-profile"
               className="text-sm text-gray-800 hover:text-primary font-semibold leading-none"
             >
-              Cody Fisher
+              {displayName}
             </Link>
-            <a
-              href="mailto:c.fisher@gmail.com"
-              className="text-xs text-gray-600 hover:text-primary font-medium leading-none"
-            >
-              c.fisher@gmail.com
-            </a>
+            {currentUser?.email && (
+              <span className="max-w-44 truncate text-xs font-medium leading-none text-gray-600">
+                {currentUser.email}
+              </span>
+            )}
           </div>
         </div>
-        <span className="badge badge-xs badge-primary badge-outline">Pro</span>
+        <span className="badge badge-xs badge-primary badge-outline">Active</span>
       </div>
     );
   };

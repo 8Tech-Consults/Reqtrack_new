@@ -1,16 +1,13 @@
 /* eslint-disable react-hooks/exhaustive-deps */
+import { useEffect, useState } from 'react';
+import { ArrowLeft, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { KeenIcon, Menu, MenuItem, MenuToggle } from '@/components';
-import { useEffect, useRef, useState } from 'react';
-import { getHeight, toAbsoluteUrl } from '@/utils';
-import { useResponsive, useViewport } from '@/hooks';
-import { DropdownUser } from '@/partials/dropdowns/user';
-import { DropdownChat } from '@/partials/dropdowns/chat';
-import { DropdownApps } from '@/partials/dropdowns/apps';
+import { IMenuItemConfig } from '@/components/menu';
+import { useAuthContext } from '@/auth';
+import { usePathname } from '@/providers';
+import { toAbsoluteUrl } from '@/utils';
 import { useDemo8Layout } from '..';
 import { SidebarMenu } from '.';
-import { usePathname } from '@/providers';
-import { useLanguage } from '@/i18n';
 import {
   Sheet,
   SheetContent,
@@ -20,183 +17,121 @@ import {
 } from '@/components/ui/sheet';
 
 const Sidebar = () => {
-  const desktopMode = useResponsive('up', 'lg');
-  const mobileMode = useResponsive('down', 'lg');
   const { pathname, prevPathname } = usePathname();
+  const { currentUser } = useAuthContext();
   const { mobileSidebarOpen, setMobileSidebarOpen } = useDemo8Layout();
-  const itemChatRef = useRef<any>(null);
-  const itemUserRef = useRef<any>(null);
-  const { isRTL } = useLanguage();
+  const [activeSection, setActiveSection] = useState<IMenuItemConfig | null>(null);
 
-  const handleDropdownChatShow = () => {
-    window.dispatchEvent(new Event('resize'));
-  };
-
-  const handleMobileSidebarClose = () => {
-    setMobileSidebarOpen(false);
-  };
-
-  const headerRef = useRef<HTMLDivElement>(null);
-  const footerRef = useRef<HTMLDivElement>(null);
-  const [scrollableHeight, setScrollableHeight] = useState<number>(0);
-  const [viewportHeight] = useViewport();
-  const scrollableOffset = 40;
+  const displayName =
+    currentUser?.fullname ||
+    [currentUser?.first_name, currentUser?.last_name].filter(Boolean).join(' ') ||
+    currentUser?.username ||
+    'Account';
 
   useEffect(() => {
-    if (footerRef.current) {
-      const headerHeight = headerRef.current ? getHeight(headerRef.current) : 0;
-      const footerHeight = getHeight(footerRef.current);
-      const availableHeight = viewportHeight - headerHeight - footerHeight - scrollableOffset;
-      setScrollableHeight(availableHeight);
-    } else {
-      setScrollableHeight(viewportHeight);
+    if (prevPathname !== pathname) {
+      setMobileSidebarOpen(false);
+      setActiveSection(null);
     }
-  }, [viewportHeight]);
+  }, [pathname, prevPathname]);
 
-  const renderContent = () => {
-    return (
-      <div className="grow lg:grow-0 lg:fixed top-0 bottom-0 z-20 flex flex-col items-stretch shrink-0 bg-[--tw-page-bg] dark:bg-[--tw-page-bg-dark]">
-        {desktopMode && (
-          <div
-            ref={headerRef}
-            className="hidden lg:flex items-center justify-center shrink-0 pt-8 pb-3.5"
+  const handleOpenChange = (open: boolean) => {
+    setMobileSidebarOpen(open);
+    if (!open) {
+      setActiveSection(null);
+      window.setTimeout(() => {
+        document.querySelector<HTMLElement>('[aria-label="Open navigation"]')?.focus();
+      }, 0);
+    }
+  };
+
+  return (
+    <Sheet open={mobileSidebarOpen} onOpenChange={handleOpenChange}>
+      <SheetContent
+        side="left"
+        className="flex w-[86vw] max-w-[380px] flex-col gap-0 border-0 bg-white p-0 shadow-[24px_0_64px_rgba(8,24,54,0.28)] data-[state=open]:duration-200 data-[state=closed]:duration-150 sm:w-[60vw] lg:hidden"
+        overlayClassName="bg-[#101c38]/70 backdrop-blur-[2px] data-[state=open]:duration-200 data-[state=closed]:duration-150"
+        close={false}
+      >
+        <SheetHeader className="sr-only">
+          <SheetTitle>{activeSection?.title || 'Primary navigation'}</SheetTitle>
+          <SheetDescription>Navigate the NAD requisition workspace</SheetDescription>
+        </SheetHeader>
+
+        <div className="flex min-h-20 items-center justify-between gap-3 border-b border-slate-200 px-5">
+          {activeSection ? (
+            <>
+              <div className="min-w-0">
+                <span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-[#2aaed3]">
+                  Section
+                </span>
+                <span className="block truncate text-lg font-bold text-[#172550]">
+                  {activeSection.title}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveSection(null)}
+                className="ease-premium flex size-10 shrink-0 items-center justify-center rounded-full border border-slate-200 text-[#172550] outline-none transition-[background-color,border-color,transform] duration-150 hover:border-[#b9e8f4] hover:bg-[#e9f8fc] focus-visible:ring-2 focus-visible:ring-[#2aaed3] active:scale-[0.96] motion-reduce:transition-none motion-reduce:transform-none"
+                aria-label="Back to primary navigation"
+              >
+                <ArrowLeft className="size-4.5" />
+              </button>
+            </>
+          ) : (
+            <>
+              <Link
+                to="/dashboard"
+                className="flex items-center gap-3 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-[#2aaed3]"
+              >
+                <span className="flex size-11 items-center justify-center rounded-xl bg-[#e9f8fc]">
+                  <img src={toAbsoluteUrl('/media/images/logo.png')} className="size-9" alt="" />
+                </span>
+                <span>
+                  <span className="block text-base font-bold text-[#172550]">NAD</span>
+                  <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                    Requisition workspace
+                  </span>
+                </span>
+              </Link>
+              <button
+                type="button"
+                onClick={() => handleOpenChange(false)}
+                className="ease-premium flex size-10 items-center justify-center rounded-full text-slate-500 outline-none transition-[background-color,color,transform] duration-150 hover:bg-slate-100 hover:text-[#172550] focus-visible:ring-2 focus-visible:ring-[#2aaed3] active:scale-[0.96] motion-reduce:transition-none motion-reduce:transform-none"
+                aria-label="Close navigation"
+              >
+                <X className="size-5" />
+              </button>
+            </>
+          )}
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          <SidebarMenu
+            mobile
+            activeSection={activeSection}
+            onOpenSection={setActiveSection}
+          />
+        </div>
+
+        <div className="border-t border-slate-200 bg-slate-50/80 p-4">
+          <Link
+            to="/account/home/user-profile"
+            className="ease-premium flex items-center gap-3 rounded-xl px-2 py-2 outline-none transition-[background-color,transform] duration-150 hover:bg-white focus-visible:ring-2 focus-visible:ring-[#2aaed3] active:scale-[0.98] motion-reduce:transition-none motion-reduce:transform-none"
           >
-            <Link to="/">
-              <img
-                src={toAbsoluteUrl('/media/images/logo.png')}
-                className="dark:hidden max-h-[42px]"
-              />
-              <img
-                src={toAbsoluteUrl('/media/images/logo.png')}
-                className="hidden dark:block max-h-[42px]"
-              />
-            </Link>
-          </div>
-        )}
-
-        <div
-          className="scrollable-y-hover grow gap-2.5 shrink-0 flex items-center pt-5 lg:pt-0 ps-3 pe-3 lg:pe-0 flex-col"
-          style={{
-            ...(desktopMode && scrollableHeight > 0 && { height: `${scrollableHeight}px` })
-          }}
-        >
-          <SidebarMenu />
+            <span className="flex size-10 items-center justify-center rounded-full bg-[#172550] text-xs font-bold text-white">
+              {displayName.slice(0, 1).toUpperCase()}
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-semibold text-slate-800">{displayName}</span>
+              <span className="block truncate text-xs text-slate-500">View account</span>
+            </span>
+            <span className="ml-auto text-xs font-semibold text-[#2aaed3]">Account</span>
+          </Link>
         </div>
-
-        <div ref={footerRef} className="flex flex-col gap-5 items-center shrink-0 pb-4">
-          <div className="flex flex-col gap-1.5">
-            <Menu>
-              <MenuItem
-                ref={itemChatRef}
-                onShow={handleDropdownChatShow}
-                toggle="dropdown"
-                trigger="click"
-                dropdownProps={{
-                  placement: isRTL() ? 'right-start' : 'right-end',
-                  modifiers: [
-                    {
-                      name: 'offset',
-                      options: {
-                        offset: [110, 30] // [skid, distance]
-                      }
-                    }
-                  ]
-                }}
-              >
-                <MenuToggle className="btn btn-icon btn-icon-xl relative rounded-md size-9 border border-transparent hover:bg-light hover:text-primary hover:border-gray-200 dropdown-open:bg-gray-200 text-gray-600">
-                  <KeenIcon icon="messages" />
-                </MenuToggle>
-
-                {DropdownChat({ menuTtemRef: itemChatRef })}
-              </MenuItem>
-            </Menu>
-
-            <Menu>
-              <MenuItem
-                ref={itemChatRef}
-                onShow={handleDropdownChatShow}
-                toggle="dropdown"
-                trigger="click"
-                dropdownProps={{
-                  placement: isRTL() ? 'right-start' : 'right-end',
-                  modifiers: [
-                    {
-                      name: 'offset',
-                      options: {
-                        offset: isRTL() ? [-20, 30] : [20, 30] // [skid, distance]
-                      }
-                    }
-                  ]
-                }}
-              >
-                <MenuToggle className="btn btn-icon btn-icon-xl relative rounded-md size-9 border border-transparent hover:bg-light hover:text-primary hover:border-gray-200 dropdown-open:bg-gray-200 text-gray-600">
-                  <KeenIcon icon="setting-2" />
-                </MenuToggle>
-
-                {DropdownApps()}
-              </MenuItem>
-            </Menu>
-          </div>
-
-          <Menu>
-            <MenuItem
-              ref={itemUserRef}
-              toggle="dropdown"
-              trigger="click"
-              dropdownProps={{
-                placement: isRTL() ? 'right-start' : 'right-end',
-                modifiers: [
-                  {
-                    name: 'offset',
-                    options: {
-                      offset: isRTL() ? [-20, 28] : [20, 28] // [skid, distance]
-                    }
-                  }
-                ]
-              }}
-            >
-              <MenuToggle className="btn btn-icon">
-                <img
-                  className="size-8 justify-center rounded-lg border border-gray-500 shrink-0"
-                  src={toAbsoluteUrl('/media/avatars/gray/5.png')}
-                  alt=""
-                />
-              </MenuToggle>
-              {DropdownUser({ menuItemRef: itemUserRef })}
-            </MenuItem>
-          </Menu>
-        </div>
-      </div>
-    );
-  };
-
-  useEffect(() => {
-    // Hide drawer on route chnage after menu link click
-    if (mobileMode && prevPathname !== pathname) {
-      handleMobileSidebarClose();
-    }
-  }, [mobileMode, pathname, prevPathname]);
-
-  if (desktopMode) {
-    return renderContent();
-  } else {
-    return (
-      <Sheet open={mobileSidebarOpen} onOpenChange={handleMobileSidebarClose}>
-        <SheetContent
-          className="border-0 p-0 w-[--tw-sidebar-width] flex items-stretch flex-col scrollable-y-auto"
-          forceMount={true}
-          // side="left"
-          close={false}
-        >
-          <SheetHeader className="sr-only">
-            <SheetTitle>Mobile Menu</SheetTitle>
-            <SheetDescription></SheetDescription>
-          </SheetHeader>
-          {renderContent()}
-        </SheetContent>
-      </Sheet>
-    );
-  }
+      </SheetContent>
+    </Sheet>
+  );
 };
 
 export { Sidebar };

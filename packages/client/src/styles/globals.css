@@ -8,3 +8,24 @@
 
 /* Shadcn UI */
 @import "shadcn.ui";
+
+@layer utilities {
+  .ease-premium {
+    transition-timing-function: cubic-bezier(0.23, 1, 0.32, 1);
+  }
+}
+
+/* Keep the application bar's rhythm stable across theme utility builds. */
+.nad-app-header {
+  height: 4rem;
+  min-height: 4rem;
+  flex: 0 0 4rem;
+}
+
+@media (min-width: 1024px) {
+  .nad-app-header {
+    height: 4.5rem;
+    min-height: 4.5rem;
+    flex-basis: 4.5rem;
+  }
+}
