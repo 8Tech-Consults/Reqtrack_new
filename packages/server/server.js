@@ -15,6 +15,7 @@ import {
   hasUsableBearerToken,
   isPublicGraphqlOperation,
 } from "./utils/graphqlPublicAccess.js";
+import rateLimit from "express-rate-limit";
 import { logError, requestLogContext } from "./utils/logger.js";
 import graphqlUploadExpress from "graphql-upload/graphqlUploadExpress.mjs";
 import {
@@ -48,6 +49,41 @@ app.use((req, res, next) => {
 app.use(express.static("public"));
 app.use(cors({ origin: "*", exposedHeaders: ["x-request-id"] }));
 app.use(express.json());
+
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  // skipSuccessfulRequests: true,
+  skip: (req) => {
+    const body = req.body ?? {};
+    const operationName = body?.operationName || req.query?.operationName;
+    const query =
+      typeof body?.query === "string"
+        ? body.query
+        : typeof req.query?.query === "string"
+          ? req.query.query
+          : "";
+    const isLoginOperation =
+      operationName === "Login" || /\blogin\s*\(/i.test(query);
+
+      console.log("[loginLimiter]", { operationName, isLoginOperation, willCount: isLoginOperation });
+  
+    return !isLoginOperation; 
+  },
+  handler: (_req, res) => {
+    res.status(200).json({
+      errors: [
+        {
+          message: "Too many login attempts. Please try again in 15 minutes.",
+        },
+      ],
+    });
+  },
+});
+
+
 const httpServer = http.createServer(app);
 
 const PWD_TEMPLATE_FILE = "Pwd_Profiling_EightTech.xlsx";
@@ -854,6 +890,7 @@ app.use(
   "/graphql",
   cors({ origin: "*", exposedHeaders: ["x-request-id"] }),
   express.json(),
+  loginLimiter,
   graphqlUploadExpress(),
   // expressMiddleware accepts the same arguments:
   // an Apollo Server instance and optional configuration options

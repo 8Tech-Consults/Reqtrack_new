@@ -252,29 +252,6 @@ export const getUsersCount = async ({
   }
 };
 
-// Light user/crop variety lookups
-const fetchUserById = async (id) => {
-  if (!id) return null;
-  try {
-    const [rows] = await db.execute(
-      "SELECT id, name, email, image FROM users WHERE id = ? LIMIT 1",
-      [id]
-    );
-    if (!rows.length) return null;
-    const u = rows[0];
-    return { id: String(u.id), name: u.name, email: u.email, image: u.image };
-  } catch (e) {
-    return null;
-  }
-};
-
-const DU_AGENT_ROLE_ID = "44444444-4444-4444-4444-444444444444";
-const DU_AGENT_ROLE_NAME = "DU Agent";
-const DU_AGENT_ROLE_PERMISSIONS = [
-  { can_view_pwds: true },
-  { can_create_pwds: true },
-  { can_view_du: true },
-];
 
 
 const userResolvers = {
@@ -289,12 +266,12 @@ const userResolvers = {
   },
   Query: {
     users: async (_, args, context) => {
-      // const userPermissions = context?.req?.user?.permissions;
-      // ensureAnyPermission(
-      //   userPermissions,
-      //   ["can_manage_users", "can_create_users"],
-      //   "You dont have permissions to view users"
-      // );
+      const userPermissions = context?.req?.user?.permissions;
+      ensureAnyPermission(
+        userPermissions,
+        ["can_manage_users", "can_create_users"],
+        "You dont have permissions to view users"
+      );
       const limit = Number.isFinite(args?.limit)
         ? Math.max(1, Number(args.limit))
         : 10;
@@ -311,12 +288,12 @@ const userResolvers = {
       });
     },
     usersCount: async (_, args, context) => {
-      // const userPermissions = context?.req?.user?.permissions;
-      // ensureAnyPermission(
-      //   userPermissions,
-      //   ["can_manage_users", "can_create_users"],
-      //   "You dont have permissions to view users"
-      // );
+      const userPermissions = context?.req?.user?.permissions;
+      ensureAnyPermission(
+        userPermissions,
+        ["can_manage_users", "can_create_users"],
+        "You dont have permissions to view users"
+      );
 
       return await getUsersCount({
         role_name: args?.roleName || undefined,

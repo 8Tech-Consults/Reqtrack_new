@@ -14,13 +14,14 @@ interface RequisitionItemOption {
 
 interface Props {
   requisitionId: string;
+  requisitionAmountRequested: number;
   requisitionItems: RequisitionItemOption[];
   fileBaseUrl: string;
 }
 
 type Mode = 'view' | 'create' | 'edit';
 
-export function AccountabilitySection({ requisitionId, requisitionItems, fileBaseUrl }: Props) {
+export function AccountabilitySection({ requisitionId, requisitionAmountRequested, requisitionItems, fileBaseUrl }: Props) {
   const [mode, setMode] = useState<Mode>('view');
 
   const { data, loading, error, refetch } = useQuery<
@@ -68,6 +69,7 @@ export function AccountabilitySection({ requisitionId, requisitionItems, fileBas
   return (
     <AccountabilityDetail
       id={accountability!.id}
+      requestedAmount={requisitionAmountRequested}
       fileBaseUrl={fileBaseUrl}
       onBack={() => {}}          // no "back" needed — it's embedded in the requisition page
       onEdit={() => setMode('edit')}

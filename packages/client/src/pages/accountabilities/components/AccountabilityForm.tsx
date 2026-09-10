@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Upload, Trash2, Plus } from 'lucide-react';
 import { Accountability, AccountabilityItemInput } from '../accountability';
-import { GET_ACCOUNTABILITIES, SAVE_ACCOUNTABILITY } from '@/gql/accountabilities'; 
-import {AccountabilityStatus} from '@/pages/accountabilities/accountability.ts';
+import { GET_ACCOUNTABILITIES, SAVE_ACCOUNTABILITY } from '@/gql/accountabilities';
+import { AccountabilityStatus } from '@/pages/accountabilities/accountability.ts';
 import { useMutation } from '@apollo/client/react';
+import { URL_2 } from '@/config/urls';
 
 interface RequisitionItemOption {
   id: string;
@@ -19,7 +20,16 @@ interface Props {
   onCancel: () => void;
 }
 
-function emptyItem(): AccountabilityItemInput {
+// Track each file slot's existing filename separately from the File object,
+// so we know (a) what to show before the user picks anything, and (b) whether
+// the user actually replaced it, vs. leaving it untouched.
+type ItemDraft = AccountabilityItemInput & {
+  invoiceExistingName?: string | null;
+  proofOfPaymentExistingName?: string | null;
+  receiptExistingName?: string | null;
+};
+
+function emptyItem(): ItemDraft {
   return {
     id: null,
     accountedAmount: null,
@@ -29,19 +39,27 @@ function emptyItem(): AccountabilityItemInput {
     proofOfPayment: null,
     receipt: null,
     requisitionItemId: null,
+    invoiceExistingName: null,
+    proofOfPaymentExistingName: null,
+    receiptExistingName: null,
   };
-}
+} 
+
+// Adjust this path to match wherever your backend actually serves accountability files.
+const existingFileUrl = (name: string) => `${URL_2}/accountability_docs/${name}`;
 
 const FileSlot = ({
   label,
   file,
   existingName,
   onChange,
+  onClearExisting,
 }: {
   label: string;
   file: File | null;
   existingName?: string | null;
   onChange: (f: File | null) => void;
+  onClearExisting?: () => void;
 }) => (
   <div className="space-y-1">
     <label className="text-xs font-medium text-slate-500">{label}</label>
@@ -54,9 +72,32 @@ const FileSlot = ({
       />
       <div className="flex items-center justify-center gap-1.5 text-xs text-slate-600">
         <Upload size={13} />
-        {file ? file.name : existingName ? existingName : 'Upload'}
+        {file ? (
+          file.name
+        ) : existingName ? (
+          <a
+            href={existingFileUrl(existingName)}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="text-blue-600 underline relative z-10"
+          >
+            {existingName}
+          </a>
+        ) : (
+          'Upload'
+        )}
       </div>
     </div>
+    {existingName && !file && onClearExisting && (
+      <button
+        type="button"
+        onClick={onClearExisting}
+        className="text-xs text-red-500 hover:text-red-600"
+      >
+        Remove existing file
+      </button>
+    )}
   </div>
 );
 
@@ -66,14 +107,14 @@ export function AccountabilityForm({ requisitionId, requisitionItems, existing, 
   }, { input: import('../accountability').AccountabilityInput }>(
     SAVE_ACCOUNTABILITY,
     { refetchQueries: [GET_ACCOUNTABILITIES] }
-  );;
+  );
 
   const [reportDate, setReportDate] = useState(
     existing?.reportDate?.slice(0, 10) ?? new Date().toISOString().slice(0, 10)
   );
   const [summary, setSummary] = useState(existing?.summary ?? '');
   const [status, setStatus] = useState<AccountabilityStatus>(existing?.status ?? 'Draft');
-  const [items, setItems] = useState<AccountabilityItemInput[]>(
+  const [items, setItems] = useState<ItemDraft[]>(
     existing?.items?.length
       ? existing.items.map((it) => ({
           id: it.id,
@@ -84,12 +125,37 @@ export function AccountabilityForm({ requisitionId, requisitionItems, existing, 
           proofOfPayment: null,
           receipt: null,
           requisitionItemId: it.requisitionItemId,
+          // Preserve what's already on file so it isn't wiped out just by opening edit mode.
+          invoiceExistingName: (it as any).invoiceName ?? null,
+          proofOfPaymentExistingName: (it as any).proofOfPaymentName ?? null,
+          receiptExistingName: (it as any).receiptName ?? null,
         }))
       : [emptyItem()]
   );
+  // Tracks file fields the user explicitly asked to clear (vs. simply not touching).
+  const [clearedFiles, setClearedFiles] = useState<Record<number, Set<'invoice' | 'proofOfPayment' | 'receipt'>>>({});
 
-  const updateItem = (index: number, patch: Partial<AccountabilityItemInput>) => {
+  const updateItem = (index: number, patch: Partial<ItemDraft>) => {
     setItems((prev) => prev.map((it, i) => (i === index ? { ...it, ...patch } : it)));
+  };
+
+  const clearExistingFile = (index: number, field: 'invoice' | 'proofOfPayment' | 'receipt') => {
+    setItems((prev) =>
+      prev.map((it, i) =>
+        i === index
+          ? {
+              ...it,
+              [`${field}ExistingName`]: null,
+            }
+          : it
+      )
+    );
+    setClearedFiles((prev) => {
+      const next = { ...prev };
+      next[index] = new Set(next[index]);
+      next[index].add(field);
+      return next;
+    });
   };
 
   const addItem = () => setItems((prev) => [...prev, emptyItem()]);
@@ -98,6 +164,22 @@ export function AccountabilityForm({ requisitionId, requisitionItems, existing, 
   const totalAccounted = items.reduce((sum, it) => sum + (it.accountedAmount ?? 0) + (it.bankCharges ?? 0), 0);
 
   const handleSubmit = async (submitStatus: AccountabilityStatus) => {
+    const payloadItems = items.map((it, index) => {
+      const cleared = clearedFiles[index] ?? new Set();
+      // Only send a file field if the user picked a new file or explicitly cleared
+      // the existing one. Otherwise omit it so the backend leaves it untouched.
+      const { invoiceExistingName, proofOfPaymentExistingName, receiptExistingName, ...rest } = it;
+      const filePatch: Partial<AccountabilityItemInput> = {};
+      if (it.invoice || cleared.has('invoice')) filePatch.invoice = it.invoice;
+      if (it.proofOfPayment || cleared.has('proofOfPayment')) filePatch.proofOfPayment = it.proofOfPayment;
+      if (it.receipt || cleared.has('receipt')) filePatch.receipt = it.receipt;
+
+      return {
+        ...rest,
+        ...filePatch,
+      };
+    });
+
     const { data } = await save({
       variables: {
         input: {
@@ -106,7 +188,7 @@ export function AccountabilityForm({ requisitionId, requisitionItems, existing, 
           reportDate,
           summary: summary || null,
           status: submitStatus,
-          items,
+          items: payloadItems,
         },
       },
     });
@@ -213,9 +295,27 @@ export function AccountabilityForm({ requisitionId, requisitionItems, existing, 
               </div>
 
               <div className="grid grid-cols-3 gap-3">
-                <FileSlot label="Invoice" file={item.invoice} onChange={(f) => updateItem(index, { invoice: f })} />
-                <FileSlot label="Proof of Payment" file={item.proofOfPayment} onChange={(f) => updateItem(index, { proofOfPayment: f })} />
-                <FileSlot label="Receipt" file={item.receipt} onChange={(f) => updateItem(index, { receipt: f })} />
+                <FileSlot
+                  label="Invoice"
+                  file={item.invoice}
+                  existingName={item.invoiceExistingName}
+                  onChange={(f) => updateItem(index, { invoice: f })}
+                  onClearExisting={() => clearExistingFile(index, 'invoice')}
+                />
+                <FileSlot
+                  label="Proof of Payment"
+                  file={item.proofOfPayment}
+                  existingName={item.proofOfPaymentExistingName}
+                  onChange={(f) => updateItem(index, { proofOfPayment: f })}
+                  onClearExisting={() => clearExistingFile(index, 'proofOfPayment')}
+                />
+                <FileSlot
+                  label="Receipt"
+                  file={item.receipt}
+                  existingName={item.receiptExistingName}
+                  onChange={(f) => updateItem(index, { receipt: f })}
+                  onClearExisting={() => clearExistingFile(index, 'receipt')}
+                />
               </div>
 
               {linked && (

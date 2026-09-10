@@ -53,6 +53,7 @@ interface Props {
   id: string;
   onBack: () => void;
   onEdit: (id: string) => void;
+  requestedAmount: number;
   fileBaseUrl: string; // e.g. URL_2 from your upload component
 }
 
@@ -80,7 +81,7 @@ function FileLink({ label, name, baseUrl }: { label: string; name: string | null
   );
 }
 
-export function AccountabilityDetail({ id, onBack, onEdit, fileBaseUrl }: Props) {
+export function AccountabilityDetail({ id, requestedAmount, onBack, onEdit, fileBaseUrl }: Props) {
   const { data, loading, error, refetch } = useQuery<
     { accountability: Accountability | null },
     { id: string }
@@ -172,6 +173,10 @@ export function AccountabilityDetail({ id, onBack, onEdit, fileBaseUrl }: Props)
 
       <div className="grid grid-cols-3 gap-3">
         <div className="rounded-lg border border-slate-200 p-3">
+          <p className="text-xs font-medium text-slate-500">Amount Requested</p>
+          <p className="text-base font-semibold text-slate-900">{formatMoney(requestedAmount)}</p>
+        </div>
+        <div className="rounded-lg border border-slate-200 p-3">
           <p className="text-xs font-medium text-slate-500">Total Accounted</p>
           <p className="text-base font-semibold text-slate-900">{formatMoney(a.totalAccountedAmount)}</p>
         </div>
@@ -230,7 +235,7 @@ export function AccountabilityDetail({ id, onBack, onEdit, fileBaseUrl }: Props)
         </div>
       ) 
 
-      }
+      } 
 
        {canReview && (
         <div className="rounded-lg border border-slate-200 p-4 space-y-3">
