@@ -33,6 +33,23 @@ export const MENU_SIDEBAR: TMenuConfig = [
     title: 'Staff',
     icon: 'people',
     path: '/staff',
+    children: [
+      {
+        title: 'Staff directory',
+        icon: 'people',
+        path: '/staff'
+      },
+      {
+        title: 'User accounts',
+        icon: 'profile-user',
+        path: '/settings/users'
+      },
+      {
+        title: 'Roles & permissions',
+        icon: 'shield-tick',
+        path: '/settings/roles'
+      }
+    ]
     requiredPermissions: [getPerm("staff", "can_manage_staff")]
   }
 ];

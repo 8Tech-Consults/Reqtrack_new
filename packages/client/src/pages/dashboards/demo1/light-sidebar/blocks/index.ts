@@ -1,4 +1,6 @@
 export * from './ChannelStats';
+export * from './DashboardStatusChart';
+export * from './DisbursementChart';
 export * from './EarningsChart';
 export * from './EntryCallout';
 export * from './Highlights';

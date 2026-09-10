@@ -2,51 +2,71 @@ import { Fragment } from 'react';
 import { Link } from 'react-router-dom';
 import { FormattedMessage } from 'react-intl';
 import { useAuthContext } from '@/auth';
-import { toAbsoluteUrl } from '@/utils';
-import { URL_2 } from '@/config/urls';
-import { KeenIcon } from '@/components';
-import { MenuItem, MenuLink, MenuSub, MenuTitle, MenuSeparator, MenuIcon } from '@/components/menu';
+import { useLanguage } from '@/i18n';
+import { DropdownUserLanguages } from './DropdownUserLanguages';
+import { useSettings } from '@/providers/SettingsProvider';
+import { DefaultTooltip, KeenIcon } from '@/components';
+import {
+  MenuItem,
+  MenuLink,
+  MenuSub,
+  MenuTitle,
+  MenuSeparator,
+  MenuArrow,
+  MenuIcon
+} from '@/components/menu';
 
 interface IDropdownUserProps {
   menuItemRef: any;
 }
 
 const DropdownUser = ({ menuItemRef }: IDropdownUserProps) => {
-  const { currentUser, logout } = useAuthContext();
+  const { settings, storeSettings } = useSettings();
+  const { logout, currentUser } = useAuthContext();
+  const { isRTL } = useLanguage();
 
-  const avatarSrc = currentUser?.image
-    ? `${URL_2}/imgs/${currentUser.image}`
-    : toAbsoluteUrl('/media/avatars/blank.png');
+  const displayName =
+    currentUser?.fullname ||
+    [currentUser?.first_name, currentUser?.last_name].filter(Boolean).join(' ') ||
+    currentUser?.username ||
+    'Account';
+  const initials = displayName
+    .split(' ')
+    .map((part) => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
+
+  const handleThemeMode = (event: ChangeEvent<HTMLInputElement>) => {
+    const newThemeMode = event.target.checked ? 'dark' : 'light';
+
+    storeSettings({
+      themeMode: newThemeMode
+    });
+  };
 
   const buildHeader = () => {
     return (
       <div className="flex items-center justify-between px-5 py-1.5 gap-1.5">
         <div className="flex items-center gap-2">
-          <img
-            className="size-9 rounded-full border-2 border-success object-cover"
-            src={avatarSrc}
-            alt=""
-          />
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#172550] text-xs font-bold text-white">
+            {initials}
+          </span>
           <div className="flex flex-col gap-1.5">
             <Link
               to="/account/home/user-profile"
               className="text-sm text-gray-800 hover:text-primary font-semibold leading-none"
             >
-              {currentUser?.name || currentUser?.username || 'My Account'}
+              {displayName}
             </Link>
             {currentUser?.email && (
-              <a
-                href={`mailto:${currentUser.email}`}
-                className="text-xs text-gray-600 hover:text-primary font-medium leading-none"
-              >
+              <span className="max-w-44 truncate text-xs font-medium leading-none text-gray-600">
                 {currentUser.email}
-              </a>
+              </span>
             )}
           </div>
         </div>
-        {currentUser?.role_name && (
-          <span className="badge badge-xs badge-primary badge-outline">{currentUser.role_name}</span>
-        )}
+        <span className="badge badge-xs badge-primary badge-outline">Active</span>
       </div>
     );
   };

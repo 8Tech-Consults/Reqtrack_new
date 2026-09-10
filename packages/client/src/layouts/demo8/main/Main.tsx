@@ -1,96 +1,52 @@
-import { Fragment, useRef, useState } from 'react';
+import { Fragment } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { Outlet, useLocation } from 'react-router';
-import { Menu, MenuItem, MenuToggle, useMenuCurrentItem } from '@/components/menu';
+import { useAuthContext } from '@/auth';
+import { useMenuCurrentItem } from '@/components/menu';
 import { useMenus } from '@/providers';
-import { Header, Sidebar, Footer, Toolbar, ToolbarHeading, ToolbarActions } from '..';
-import { Link } from 'react-router-dom';
-import { KeenIcon } from '@/components';
-import { useResponsive } from '@/hooks';
-import { ModalSearch } from '@/partials/modals/search/ModalSearch';
-import { DropdownNotifications } from '@/partials/dropdowns/notifications';
-import { useLanguage } from '@/i18n';
+import { Footer, Header, Sidebar } from '..';
 
 const Main = () => {
-  const mobileMode = useResponsive('down', 'lg');
-  const itemNotificationsRef = useRef<any>(null);
   const { pathname } = useLocation();
+  const { currentUser } = useAuthContext();
   const { getMenuConfig } = useMenus();
-  const menuConfig = getMenuConfig('primary');
-  const menuItem = useMenuCurrentItem(pathname, menuConfig);
-  const [searchModalOpen, setSearchModalOpen] = useState(false);
-  const handleOpen = () => setSearchModalOpen(true);
-  const { isRTL } = useLanguage();
-  const handleClose = () => {
-    setSearchModalOpen(false);
-  };
+  const menuItem = useMenuCurrentItem(pathname, getMenuConfig('primary'));
+  const workspaceName = currentUser?.companyName || 'Requisition Management Workspace';
 
   return (
     <Fragment>
       <Helmet>
-        <title>{menuItem?.title}</title>
+        <title>{menuItem?.title ? `${menuItem.title} · NAD Requisition` : 'NAD Requisition'}</title>
       </Helmet>
-      <div className="flex grow">
-        {mobileMode && <Header />}
 
-        <div className="flex flex-col lg:flex-row grow pt-[--tw-header-height] lg:pt-0">
-          <Sidebar />
+      <div className="flex min-h-screen flex-col bg-[#f3f6f9] dark:bg-[--tw-page-bg-dark]">
+        <Header />
+        <Sidebar />
 
-          <div className="flex flex-col grow rounded-xl bg-[--tw-content-bg] dark:bg-[--tw-content-bg-dark] border border-gray-300 dark:border-gray-200 lg:ms-[--tw-sidebar-width] mt-0 lg:mt-5 m-5">
-            <div className="flex flex-col grow lg:scrollable-y-auto lg:[scrollbar-width:auto] lg:light:[--tw-scrollbar-thumb-color:var(--tw-content-scrollbar-color)] pt-5">
-              <main className="grow" role="content">
-                <Toolbar>
-                  <ToolbarHeading />
-
-                  <ToolbarActions>
-                    <button
-                      onClick={handleOpen}
-                      className="btn btn-icon btn-icon-lg size-8 rounded-md hover:bg-gray-200 dropdown-open:bg-gray-200 hover:text-primary text-gray-600"
-                    >
-                      <KeenIcon icon="magnifier" className="!text-base" />
-                    </button>
-                    <ModalSearch open={searchModalOpen} onOpenChange={handleClose} />
-
-                    <Menu className="me-1.5">
-                      <MenuItem
-                        ref={itemNotificationsRef}
-                        toggle="dropdown"
-                        trigger="click"
-                        dropdownProps={{
-                          placement: isRTL() ? 'bottom-start' : 'bottom-end',
-                          modifiers: [
-                            {
-                              name: 'offset',
-                              options: {
-                                offset: [10, 10] // [skid, distance]
-                              }
-                            }
-                          ]
-                        }}
-                      >
-                        <MenuToggle className="dropdown-toggle btn btn-icon btn-icon-lg size-8 rounded-md hover:bg-gray-200 dropdown-open:bg-gray-200 hover:text-primary text-gray-600">
-                          <KeenIcon icon="notification-status" className="!text-base" />
-                        </MenuToggle>
-                        {DropdownNotifications({ menuTtemRef: itemNotificationsRef })}
-                      </MenuItem>
-                    </Menu>
-
-                    <Link
-                      to={'/account/home/get-started'}
-                      className="btn btn-xs btn-icon-lg btn-light"
-                    >
-                      <KeenIcon icon="exit-down" className="!text-base" />
-                      Export
-                    </Link>
-                  </ToolbarActions>
-                </Toolbar>
-
-                <Outlet />
-              </main>
+        <div className="w-screen max-w-[100vw] overflow-x-clip border-b border-slate-200 bg-white dark:border-gray-200 dark:bg-[--tw-content-bg-dark]">
+          <div className="mx-auto flex min-h-[58px] w-full max-w-[1536px] items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-bold text-[#172550] dark:text-gray-900 sm:text-[15px]">
+                {/* {workspaceName} */}
+                {menuItem?.title || workspaceName}
+              </p>
+              <p className="mt-0.5 text-[11px] font-medium text-slate-400 sm:hidden">
+                {menuItem?.title || 'Workspace'}
+              </p>
             </div>
-            <Footer />
+            {/* <div className="hidden items-center gap-2 text-xs font-medium text-slate-500 sm:flex">
+              <span className="size-1.5 rounded-full bg-[#35b9de]" aria-hidden="true" />
+              <span>Current view</span>
+              <span className="font-semibold text-slate-700">{menuItem?.title || 'Workspace'}</span>
+            </div> */}
           </div>
         </div>
+
+        <main id="main-content" className="grow py-2 sm:py-3 lg:py-4" role="main">
+          <Outlet />
+        </main>
+
+        <Footer />
       </div>
     </Fragment>
   );
