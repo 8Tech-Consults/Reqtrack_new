@@ -7,6 +7,7 @@ import { KeenIcon } from '@/components';
 import { useAuthContext } from '@/auth';
 import { useLayout } from '@/providers';
 import { toAbsoluteUrl } from '@/utils';
+import useBodyClasses from '@/hooks/useBodyClasses';
 
 const loginSchema = Yup.object().shape({
   email: Yup.string()
@@ -28,6 +29,7 @@ const initialValues = {
 };
 
 const Login = () => {
+  
   const [loading, setLoading] = useState(false);
   const { login, auth } = useAuthContext();
   const navigate = useNavigate();
@@ -73,7 +75,7 @@ const Login = () => {
       }
       setLoading(false);
     }
-  });
+  }); 
 
   const togglePassword = (event: MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
@@ -83,7 +85,7 @@ const Login = () => {
   return (
     <div className="w-full max-w-[460px]">
       <form
-        className="space-y-6 rounded-[28px] border border-slate-200 bg-white px-7 py-8 shadow-[0_18px_50px_-25px_rgba(15,23,42,0.18)] md:px-10 md:py-10"
+        className="space-y-6 rounded-[28px] border border-gray-200 bg-white px-7 py-8 shadow-[0_18px_50px_-25px_rgba(15,23,42,0.18)] md:px-10 md:py-10"
         onSubmit={formik.handleSubmit}
         noValidate
       >
@@ -99,11 +101,11 @@ const Login = () => {
           </div>
 
           <div className="space-y-2">
-            <h3 className="text-3xl font-semibold tracking-tight text-slate-900 leading-tight">
+            <h3 className="text-3xl font-semibold tracking-tight text-gray-900 leading-tight">
               Log in to Your Account
             </h3>
-            <p className="text-sm text-slate-500">
-              Welcome back! 
+            <p className="text-sm text-gray-500">
+              Welcome back!
             </p>
           </div>
 
@@ -143,14 +145,14 @@ const Login = () => {
         </div> */}
 
         {formik.status && (
-          <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          <div className="rounded-xl border border-danger-light bg-danger-light px-4 py-3 text-sm text-danger">
             {formik.status}
           </div>
         )}
 
         <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium text-slate-900">Email</label>
-          <label className="input rounded-xl border-slate-200 bg-white shadow-none">
+          <label className="text-sm font-medium text-gray-900">Email</label>
+          <label className="input rounded-xl border-gray-200 bg-white shadow-none">
             <input
               placeholder="Enter your email"
               autoComplete="off"
@@ -169,19 +171,19 @@ const Login = () => {
 
         <div className="flex flex-col gap-1">
           <div className="flex items-center justify-between gap-1">
-            <label className="text-sm font-medium text-slate-900">Password</label>
+            <label className="text-sm font-medium text-gray-900">Password</label>
             <Link
               to={
                 currentLayout?.name === 'auth-branded'
                   ? '/auth/reset-password'
                   : '/auth/classic/reset-password'
               }
-              className="text-sm shrink-0 font-semibold text-blue-600 hover:text-blue-700"
+              className="text-sm shrink-0 font-semibold text-primary hover:text-primary-active"
             >
               Forgot password?
             </Link>
           </div>
-          <label className="input rounded-xl border-slate-200 bg-white shadow-none">
+          <label className="input rounded-xl border-gray-200 bg-white shadow-none">
             <input
               type={showPassword ? 'text' : 'password'}
               placeholder="Enter your password"
@@ -213,7 +215,7 @@ const Login = () => {
               type="checkbox"
               {...formik.getFieldProps('remember')}
             />
-            <span className="checkbox-label text-slate-600">Remember me for 30 days</span>
+            <span className="checkbox-label text-gray-600">Remember me for 30 days</span>
           </label>
           <Link
             to={
@@ -221,7 +223,7 @@ const Login = () => {
                 ? '/auth/reset-password'
                 : '/auth/classic/reset-password'
             }
-            className="font-semibold text-blue-600 hover:text-blue-700"
+            className="font-semibold text-primary hover:text-primary-active"
           >
             Forgot password?
           </Link>
@@ -235,7 +237,7 @@ const Login = () => {
           {loading ? 'Signing in...' : 'Sign In'}
         </button>
 
-        <p className="text-center text-xs text-slate-500 mt-1">
+        <p className="text-center text-xs text-gray-500 mt-1">
           Protected workspace access for authorized users.
         </p>
       </form>

@@ -15,6 +15,7 @@ import { Menu as AppMenu, MenuItem, MenuToggle } from '@/components';
 import { useAuthContext } from '@/auth';
 import { useLanguage } from '@/i18n';
 import { toAbsoluteUrl } from '@/utils';
+import { useUnreadNotificationsCount } from '@/hooks/useUnreadNotificationsCount';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,6 +42,7 @@ const Header = () => {
   const itemUserRef = useRef<any>(null);
   const itemMobileUserRef = useRef<any>(null);
   const [searchModalOpen, setSearchModalOpen] = useState(false);
+  const { count: unreadNotificationsCount } = useUnreadNotificationsCount();
 
   const displayName =
     currentUser?.fullname ||
@@ -185,7 +187,9 @@ const Header = () => {
                 >
                   <MenuToggle className={actionClass} aria-label="Notifications">
                     <Bell className="size-5" />
-                    <span className="absolute right-2.5 top-2.5 size-1.5 rounded-full bg-[#72d6ee] ring-2 ring-[#172550]" />
+                    {unreadNotificationsCount > 0 && (
+                      <span className="absolute right-2.5 top-2.5 size-1.5 rounded-full bg-[#72d6ee] ring-2 ring-[#172550]" />
+                    )}
                   </MenuToggle>
                   {DropdownNotifications({ menuTtemRef: itemNotificationsRef })}
                 </MenuItem>

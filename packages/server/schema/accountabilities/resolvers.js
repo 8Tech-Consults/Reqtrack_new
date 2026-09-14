@@ -3,6 +3,7 @@ import saveData from '../../utils/db/saveData.js';
 import saveUpload from '../../helpers/saveUpload.js';
 import { db } from '../../config/config.js';
 import checkPermission from '../../helpers/checkPermission.js';
+import { notifyUser } from '../../helpers/notifications.js';
 
 const REVIEW_STATUSES = ['Closed', 'Amend'];
 
@@ -276,7 +277,7 @@ const accountabilityResolvers = {
       }
 
       const [[current]] = await db.execute(
-        `SELECT requisition_id FROM accountability_records WHERE id = ? LIMIT 1`,
+        `SELECT requisition_id, reported_by FROM accountability_records WHERE id = ? LIMIT 1`,
         [id]
       );
       if (!current) {
@@ -309,6 +310,25 @@ const accountabilityResolvers = {
           `UPDATE requisitions SET status = 'Closed', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND deleted = 0`,
           [current.requisition_id]
         );
+      }
+
+      // Let the person who reported this accountability know a review decision was made.
+      // entityId is the *requisition* id, not the accountability record's own id -
+      // accountabilities only have a route through their requisition
+      // (/requisitions/:id/accountability), so that's what the client needs to navigate.
+      if (REVIEW_STATUSES.includes(status) && current.reported_by && current.requisition_id) {
+        notifyUser({
+          userId: current.reported_by,
+          type: `Accountability${status}`,
+          title: status === 'Closed' ? 'Accountability closed' : 'Accountability needs more information',
+          message:
+            status === 'Closed'
+              ? 'Your accountability report was reviewed and closed.'
+              : `Additional information was requested on your accountability report.${notes ? ` Note: ${notes}` : ''}`,
+          entityType: 'Accountability',
+          entityId: current.requisition_id,
+          createdBy: userId || null,
+        });
       }
 
       const [[updated]] = await db.execute(

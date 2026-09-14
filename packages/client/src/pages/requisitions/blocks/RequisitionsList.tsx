@@ -14,9 +14,11 @@ import {
   TDataGridRequestParams,
 } from '@/components';
 import { ColumnDef } from '@tanstack/react-table';
-import { useApolloClient, useMutation, useQuery } from '@apollo/client/react';
+import { useApolloClient, useLazyQuery, useMutation, useQuery } from '@apollo/client/react';
+import { useSearchParams } from 'react-router-dom';
 import {
   GET_REQUISITIONS,
+  GET_REQUISITION,
   SAVE_REQUISITION,
   DELETE_REQUISITION,
   UPDATE_REQUISITION_STATUS,
@@ -324,6 +326,36 @@ const RequisitionsList = ({
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailRow, setDetailRow] = useState<RequisitionRecord | null>(null);
   const data = useMemo<RequisitionRecord[]>(() => [], []);
+
+  // Deep-link support: a notification (or any other external link) can send
+  // the user here with ?open=<id> to jump straight to that requisition's
+  // detail sheet, without depending on which page of the grid it's on.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [fetchRequisitionById] = useLazyQuery<{ requisition: RequisitionRecord | null }>(GET_REQUISITION);
+
+  useEffect(() => {
+    const openId = searchParams.get('open');
+    if (!openId) return;
+
+    fetchRequisitionById({ variables: { id: openId } }).then(({ data: openData }) => {
+      if (openData?.requisition) {
+        setDetailRow(openData.requisition);
+        setDetailOpen(true);
+      } else {
+        toast.error('That requisition could not be found.');
+      }
+    });
+
+    setSearchParams(
+      (prev) => {
+        prev.delete('open');
+        return prev;
+      },
+      { replace: true }
+    );
+    // Only ever meant to run once for the ?open= param present on arrival.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   const columns = useMemo<ColumnDef<RequisitionRecord>[]>(
     () => [

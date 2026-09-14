@@ -119,7 +119,9 @@ const AppRoutingSetup = (): ReactElement => {
           <Route path="/requisitions/:id/accountability" element={<AccountabilityPage />} />
 
           <Route path="/settings/roles" element={<RolesListPage />} />
-          <Route path="/settings/users" element={<UsersListPage />} />
+          <Route path="/settings/users" element={<PermissionGuard
+            required={['can_manage_staff']}
+          ><UsersListPage /></PermissionGuard>} />
 
           <Route path="/staff" element={<PermissionGuard
             required={['can_manage_staff']}

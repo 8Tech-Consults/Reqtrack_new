@@ -14,7 +14,7 @@ import { AuthLayout } from '@/layouts/auth';
 import { CheckEmail } from '@/auth/pages/jwt';
 
 const AuthPage = () => (
-  <Routes>
+  <Routes> 
     <Route element={<AuthBrandedLayout />}>
       <Route index element={<Login />} />
       <Route path="/login" element={<Login />} />

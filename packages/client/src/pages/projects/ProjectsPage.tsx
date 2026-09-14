@@ -1,5 +1,6 @@
 import { Dispatch, FormEvent, SetStateAction, useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, MoreVertical, Pencil, Trash2, ArrowRight, ChevronsRight } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery } from '@apollo/client/react';
 import { Container } from '@/components/container';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -138,6 +139,7 @@ export const ProjectsPage = () => {
   const programs = data?.programs || [];
   const managers = managerData?.programManagers || [];
 
+  const [searchParams, setSearchParams] = useSearchParams();
   const [selectedProgramId, setSelectedProgramId] = useState('');
   const [draftProgram, setDraftProgram] = useState<ProgramRecord | null>(null);
   const [structureDirty, setStructureDirty] = useState(false);
@@ -194,10 +196,28 @@ export const ProjectsPage = () => {
       return;
     }
 
+    // Deep-link support: a notification (or any other external link) can
+    // send the user here with ?program=<id> to jump straight to that
+    // program instead of whatever would otherwise be selected by default.
+    const requestedProgramId = searchParams.get('program');
+    if (requestedProgramId && programs.some((program) => program.id === requestedProgramId)) {
+      if (selectedProgramId !== requestedProgramId) {
+        setSelectedProgramId(requestedProgramId);
+      }
+      setSearchParams(
+        (prev) => {
+          prev.delete('program');
+          return prev;
+        },
+        { replace: true }
+      );
+      return;
+    }
+
     if (!selectedProgramId || !programs.some((program) => program.id === selectedProgramId)) {
       setSelectedProgramId(programs[0].id);
     }
-  }, [programs, selectedProgramId]);
+  }, [programs, selectedProgramId, searchParams, setSearchParams]);
 
   useEffect(() => {
     const selected = programs.find((program) => program.id === selectedProgramId) || null;

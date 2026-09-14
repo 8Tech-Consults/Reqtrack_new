@@ -6,7 +6,23 @@ import { AuthBrandedLayoutProvider } from './AuthBrandedLayoutProvider';
 
 const Layout = () => {
   // Applying body classes to manage the background color in dark mode
-  useBodyClasses('dark:bg-coal-500');
+  // useBodyClasses('dark:bg-coal-500');
+  useBodyClasses(`
+    [--tw-page-bg:#F3F6F9]
+    [--tw-page-bg-dark:var(--tw-coal-200)]
+    [--tw-content-bg:var(--tw-light)]
+    [--tw-content-bg-dark:var(--tw-coal-500)]
+    [--tw-content-scrollbar-color:#DDE5EC]
+    [--tw-header-height:76px]
+    [--tw-sidebar-width:320px]
+    [--tw-primary:#2AAED3]
+    [--tw-primary-active:#178EB3]
+    [--tw-primary-light:#E9F8FC]
+    [--tw-primary-clarity:rgba(42,174,211,0.20)]
+    [--tw-primary-inverse:#FFFFFF]
+    bg-[--tw-page-bg]
+    dark:bg-[--tw-page-bg-dark]
+  `);
 
   return (
     <Fragment>
@@ -14,11 +30,11 @@ const Layout = () => {
         {`
           .branded-bg {
             background-image:
-              radial-gradient(circle at 18% 18%, rgba(255, 255, 255, 0.18), transparent 28%),
-              linear-gradient(145deg, rgba(37, 99, 235, 0.96) 0%, rgba(59, 130, 246, 0.94) 48%, rgba(29, 78, 216, 0.96) 100%),
+              linear-gradient(145deg, rgba(13, 27, 75, 0.97) 0%, rgba(10, 22, 56, 0.98) 100%),
               url('${toAbsoluteUrl('/media/images/image1.jpg')}');
             background-size: cover;
             background-position: center;
+            background-blend-mode: normal, luminosity;
           }
           .dark .branded-bg {
             background-image:

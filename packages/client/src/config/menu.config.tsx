@@ -49,7 +49,7 @@ export const MENU_SIDEBAR: TMenuConfig = [
         icon: 'shield-tick',
         path: '/settings/roles'
       }
-    ]
+    ],
     requiredPermissions: [getPerm("staff", "can_manage_staff")]
   }
 ];
