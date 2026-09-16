@@ -433,9 +433,28 @@ const RequisitionsList = ({
   );
 
   return (
-    <div className="mb-8 bg-white p-6 rounded shadow">
+    <section className="mb-8 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+      <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+        <div className="min-w-0">
+          <h2 className="text-base font-bold tracking-[-0.01em] text-[#172550] sm:text-lg">Requisitions</h2>
+          <p className="mt-1 text-xs text-slate-500">Review, search, and manage submitted requests.</p>
+        </div>
+
+        <label className="relative block w-full shrink-0 sm:max-w-sm">
+          <span className="sr-only">Search requisitions</span>
+          <KeenIcon icon="magnifier" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="search"
+            placeholder="Search requisitions"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="input h-10 w-full pl-9"
+          />
+        </label>
+      </div>
+
       {fetchError && (
-        <div className="alert alert-danger mb-4" role="alert">
+        <div className="alert alert-danger mx-4 mt-4 sm:mx-5" role="alert">
           <div className="text-sm">{fetchError}</div>
           <button type="button" className="btn btn-xs btn-light" onClick={() => setRefreshKey((prev) => prev + 1)}>
             Retry
@@ -443,31 +462,23 @@ const RequisitionsList = ({
         </div>
       )}
 
-      <div className="mb-4">
-        <input
-          type="text"
-          placeholder="Search..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="input input-bordered w-full max-w-xs"
+      <div className="[&_[data-container]]:rounded-none [&_[data-container]]:border-x-0 [&_[data-container]]:border-t-0 [&_[data-pagination]]:border-t [&_[data-pagination]]:border-slate-100 [&_[data-pagination]]:bg-slate-50/40 [&_[data-pagination]]:px-4 [&_[data-pagination]]:py-4 sm:[&_[data-pagination]]:px-5">
+        <DataGrid
+          key={`${refreshKey}-${debouncedSearch}`}
+          columns={columns}
+          data={data}
+          serverSide={true}
+          onFetchData={fetchRequisitionsPage}
+          pagination={{ size: pageSize, sizes: [10, 20, 50] }}
+          messages={{
+            empty: fetchError
+              ? 'Failed to load requisitions'
+              : debouncedSearch
+                ? 'No requisitions match your search.'
+                : 'No requisitions available.',
+          }}
         />
       </div>
-
-      <DataGrid
-  key={`${refreshKey}-${debouncedSearch}`}
-  columns={columns}
-  data={data}
-  serverSide={true}
-  onFetchData={fetchRequisitionsPage}
-  pagination={{ size: pageSize, sizes: [10, 20, 50] }}
-  messages={{
-    empty: fetchError
-      ? 'Failed to load requisitions'
-      : debouncedSearch
-        ? 'No requisitions match your search.'
-        : 'No requisitions available.',
-  }}
-/>
 
       <RequisitionFormSheet
         open={createOpen}
@@ -490,7 +501,7 @@ const RequisitionsList = ({
         updatingStatus={updatingStatus}
         onStatusChange={handleStatusChange}
       />
-    </div>
+    </section>
   );
 };
 

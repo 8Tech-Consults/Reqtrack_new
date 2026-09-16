@@ -20,7 +20,7 @@ export const MENU_SIDEBAR: TMenuConfig = [
     path: '/dashboard'
   },
   {
-    title: 'Projects',
+    title: 'Programs',
     icon: 'questionnaire-tablet',
     path: '/projects'
   },
@@ -49,7 +49,7 @@ export const MENU_SIDEBAR: TMenuConfig = [
         icon: 'shield-tick',
         path: '/settings/roles'
       }
-    ]
+    ],
     requiredPermissions: [getPerm("staff", "can_manage_staff")]
   }
 ];

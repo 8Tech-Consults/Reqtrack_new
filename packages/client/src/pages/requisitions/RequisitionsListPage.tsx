@@ -1,67 +1,50 @@
-import { Fragment, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Container } from '@/components/container';
-import {
-  Toolbar,
-  ToolbarActions,
-  ToolbarHeading,
-  ToolbarPageTitle,
-  ToolbarDescription,
-} from '@/partials/toolbar';
 import { RequisitionsList } from './blocks/RequisitionsList.tsx';
 import { useAuthContext } from '@/auth';
 import { getPermissionsFromToken } from '@/utils/permissions.ts';
+import { useDemo8Layout } from '@/layouts/demo8';
 
 const RequisitionsListPage = () => {
   const exportFnRef = useRef<(() => void) | null>(null);
   const [exportLoading, setExportLoading] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const { setPageActions } = useDemo8Layout();
 
-  const { auth, currentUser } = useAuthContext();
+  const { auth } = useAuthContext();
   const perms = getPermissionsFromToken(auth?.access_token);
   const canEditRequisitions = Boolean(perms.can_edit_requisitions);
 
   const canCreateRequisitions = !!perms['can_create_requisitions'];
-  const canAcceptRequisitions = !!perms['can_accept_requisitions'];
-  const canApproveRequisitions = !!perms['can_approve_requisitions'];
 
-  const handleExportClick = () => {
+  const handleExportClick = useCallback(() => {
     if (exportFnRef.current) {
       exportFnRef.current();
     }
-  };
+  }, []);
+
+  const handleCreateClick = useCallback(() => setCreateOpen(true), []);
+
+  useEffect(() => {
+    setPageActions([
+      {
+        label: 'Export',
+        onClick: handleExportClick,
+        variant: 'secondary',
+        icon: 'download',
+        disabled: exportLoading,
+      },
+      ...(canCreateRequisitions
+        ? [{ label: 'New Requisition', onClick: handleCreateClick, icon: 'plus' as const }]
+        : []),
+    ]);
+
+    return () => setPageActions([]);
+  }, [canCreateRequisitions, exportLoading, handleCreateClick, handleExportClick, setPageActions]);
 
   return (
-    <Fragment>
-      <Container>
-        <Toolbar>
-          <ToolbarHeading>
-            <ToolbarPageTitle text="Requisitions" />
-            <ToolbarDescription>
-              Manage budget requisitions
-            </ToolbarDescription>
-          </ToolbarHeading>
-          <ToolbarActions>
-            <button
-              type="button"
-              className="btn btn-sm btn-light"
-              onClick={handleExportClick}
-              disabled={exportLoading || !exportFnRef.current}
-            >
-              Export
-            </button>
-            {canCreateRequisitions && (
-              <button
-                onClick={() => setCreateOpen(true)}
-                className="btn btn-sm btn-primary"
-              >
-                New Requisition
-              </button>
-            )}
-          </ToolbarActions>
-        </Toolbar>
-      </Container>
-
-      <Container>
+    <Container>
+      <div className="py-4 sm:py-5 lg:py-6">
         <RequisitionsList
           createOpen={createOpen}
           onCreateOpenChange={setCreateOpen}
@@ -71,8 +54,8 @@ const RequisitionsListPage = () => {
           }}
           canEdit={canEditRequisitions}
         />
-      </Container>
-    </Fragment>
+      </div>
+    </Container>
   );
 };
 

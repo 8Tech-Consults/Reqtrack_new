@@ -1,19 +1,15 @@
-import React, { useEffect, useState } from "react";
-import { Plus, Edit, Trash2 } from "lucide-react";
+import React, { useCallback, useEffect, useState } from "react";
+import { Edit, Trash2 } from "lucide-react";
 import { ModulesPermissions } from "./ModulesPermissions";
 import AddRoleDialog from "./blocks/AddRoleDialog";
 import { useMutation, useQuery } from "@apollo/client/react";
 import { ROLES } from "@/gql/queries";
 import { ADD_ROLE, DELETE_ROLE } from "@/gql/mutations";
 import { Container } from "@/components/container";
-import {
-  Toolbar,
-  ToolbarActions,
-  ToolbarHeading,
-} from "@/layouts/demo1/toolbar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { toFriendlyErrorMessage } from "@/utils";
+import { useDemo8Layout } from "@/layouts/demo8";
 
 type Role = {
   id: string | number;
@@ -26,7 +22,6 @@ const RolesList = ({
   roles,
   selectedRole,
   onRoleSelect,
-  onAddRole,
   onEditRole,
   onDeleteRole,
   deletingRoleId,
@@ -34,20 +29,15 @@ const RolesList = ({
   roles: Role[];
   selectedRole: Role | null;
   onRoleSelect: (r: Role) => void;
-  onAddRole: () => void;
   onEditRole: (r: Role) => void;
   onDeleteRole: (r: Role) => void;
   deletingRoleId: string | null;
 }) => {
   return (
-    <div className="bg-white rounded-lg shadow-md border border-gray-200 h-full flex flex-col">
-      <div className="px-6 py-2 border-b border-gray-200 flex items-center justify-between">
-        <h2 className="text-base font-semibold text-gray-900">Roles</h2>
-
-        <a href="#" className="btn btn-sm btn-primary" onClick={onAddRole}>
-          <Plus size={16} />
-          Add Role
-        </a>
+    <div className="flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+      <div className="border-b border-slate-200 px-5 py-4">
+        <h2 className="text-base font-bold tracking-[-0.01em] text-[#172550] sm:text-lg">Roles</h2>
+        <p className="mt-1 text-xs text-slate-500">Select a role to review its access.</p>
       </div>
       <div className="p-4 flex-1 overflow-y-auto">
         <div className="space-y-2">
@@ -57,7 +47,7 @@ const RolesList = ({
               onClick={() => onRoleSelect(role)}
               className={`p-3 rounded-lg border cursor-pointer transition-all ${
                 selectedRole?.id === role.id
-                  ? "border-green-500 bg-green-50"
+                  ? "border-[#8ddcf0] bg-[#edfaff]"
                   : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
               }`}
             >
@@ -101,10 +91,9 @@ const RolesList = ({
 };
 
 const RolesListSkeleton = () => (
-  <div className="bg-white rounded-lg shadow-md border border-gray-200 h-full flex flex-col">
-    <div className="px-6 py-3 border-b border-gray-200 flex items-center justify-between">
+  <div className="bg-white rounded-xl shadow-sm border border-gray-200 h-full flex flex-col overflow-hidden">
+    <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
       <Skeleton className="h-5 w-24" />
-      <Skeleton className="h-9 w-24" />
     </div>
     <div className="p-6 space-y-3">
       {Array.from({ length: 6 }).map((_, i) => (
@@ -142,6 +131,7 @@ const PermissionsSkeleton = () => (
 );
 
 const RolesListPage = () => {
+  const { setPageActions } = useDemo8Layout();
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
   const [isAddRoleDialogOpen, setIsAddRoleDialogOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<Role | null>(null);
@@ -166,6 +156,18 @@ const RolesListPage = () => {
     if (updated) setSelectedRole(updated);
   }, [data?.roles]);
 
+  const handleAddRole = useCallback(() => {
+    setEditingRole(null);
+    setIsAddRoleDialogOpen(true);
+    setResetForm(true);
+    setTimeout(() => setResetForm(false), 0);
+  }, []);
+
+  useEffect(() => {
+    setPageActions([{ label: "Add Role", onClick: handleAddRole, icon: "plus" }]);
+    return () => setPageActions([]);
+  }, [handleAddRole, setPageActions]);
+
   if (loading)
     return (
       // <div className="min-h-screen bg-gray-50">
@@ -180,7 +182,7 @@ const RolesListPage = () => {
           </Toolbar>
         </Container> */}
         <Container>
-          <div className="grid grid-cols-1 lg:[grid-template-columns:360px_1fr] gap-6 h-[calc(100vh-200px)] overflow-hidden">
+          <div className="grid grid-cols-1 gap-6 overflow-hidden py-4 sm:py-5 lg:h-[calc(100vh-200px)] lg:[grid-template-columns:360px_1fr] lg:py-6">
             <RolesListSkeleton />
             <PermissionsSkeleton />
           </div>
@@ -192,13 +194,6 @@ const RolesListPage = () => {
   if (error) return <div>Error loading roles</div>;
 
   const handleRoleSelect = (role: Role) => setSelectedRole(role);
-
-  const handleAddRole = () => {
-    setEditingRole(null);
-    setIsAddRoleDialogOpen(true);
-    setResetForm(true);
-    setTimeout(() => setResetForm(false), 0);
-  };
 
   const handleEditRole = (role: Role) => {
     setEditingRole(role);
@@ -249,21 +244,11 @@ const RolesListPage = () => {
     // <div className="min-h-screen bg-gray-50">
     <>
       <Container>
-        <Toolbar>
-          <ToolbarHeading
-            title="Roles"
-            description="Manage system roles and their permission"
-          />
-          <ToolbarActions></ToolbarActions>
-        </Toolbar>
-      </Container>
-      <Container>
-        <div className="grid grid-cols-1 lg:[grid-template-columns:360px_1fr] gap-6 overflow-hidden">
+        <div className="grid grid-cols-1 gap-6 overflow-hidden py-4 sm:py-5 lg:[grid-template-columns:360px_1fr] lg:py-6">
           <RolesList
             roles={roles}
             selectedRole={selectedRole}
             onRoleSelect={handleRoleSelect}
-            onAddRole={handleAddRole}
             onEditRole={handleEditRole}
             onDeleteRole={handleDeleteRole}
             deletingRoleId={deletingRoleId}

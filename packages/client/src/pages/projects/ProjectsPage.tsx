@@ -1,9 +1,9 @@
-import { Dispatch, FormEvent, SetStateAction, useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, MoreVertical, Pencil, Trash2, ArrowRight, ChevronsRight } from 'lucide-react';
+import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { ChevronRight, MoreVertical, Pencil, Trash2 } from 'lucide-react';
+import clsx from 'clsx';
 import { useMutation, useQuery } from '@apollo/client/react';
 import { Container } from '@/components/container';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   DropdownMenu,
@@ -14,14 +14,7 @@ import {
 import { useAuthContext } from '@/auth/useAuthContext';
 import { getPermissionsFromToken } from '@/utils/permissions';
 import { toast } from 'sonner';
-import { StatCard } from './components/StatCard';
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle
-} from '@/components/ui/sheet';
+import { useDemo8Layout } from '@/layouts/demo8';
 import {
   CREATE_PROGRAM,
   DELETE_PROGRAM,
@@ -52,6 +45,14 @@ type BudgetLineDraft = {
   frequency: string;
   unitPrice: string;
   units: string;
+};
+
+type PlanNodeEditor = {
+  kind: 'outcome' | 'output' | 'activity';
+  name: string;
+  outcomeId: string;
+  outputId?: string;
+  activityId?: string;
 };
 
 const calculateBudgetLineTotal = (draft: Pick<BudgetLineDraft, 'quantity' | 'frequency' | 'unitPrice'>) => {
@@ -100,6 +101,7 @@ const RowActionsMenu = ({
 
 export const ProjectsPage = () => {
   const { auth } = useAuthContext();
+  const { setPageActions } = useDemo8Layout();
   const permissions = useMemo(() => getPermissionsFromToken(auth?.access_token), [auth?.access_token]);
   const canManagePrograms = Boolean(
     permissions.can_manage_programs ||
@@ -155,9 +157,10 @@ export const ProjectsPage = () => {
   const [deletingProgramId, setDeletingProgramId] = useState<string | null>(null);
   const [budgetSheetOpen, setBudgetSheetOpen] = useState(false);
   const [budgetDraft, setBudgetDraft] = useState<BudgetLineDraft | null>(null);
-  const [collapsedOutcomes, setCollapsedOutcomes] = useState<Set<string>>(new Set());
-  const [collapsedOutputs, setCollapsedOutputs] = useState<Set<string>>(new Set());
-  const [collapsedActivities, setCollapsedActivities] = useState<Set<string>>(new Set());
+  const [selectedOutcomeId, setSelectedOutcomeId] = useState<string | null>(null);
+  const [selectedOutputId, setSelectedOutputId] = useState<string | null>(null);
+  const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null);
+  const [nodeEditor, setNodeEditor] = useState<PlanNodeEditor | null>(null);
 
   // Inline "Add a brief program description..." affordance (Program header).
   // NOTE: SAVE_PROGRAM_STRUCTURE currently only persists the outcomes tree.
@@ -166,19 +169,6 @@ export const ProjectsPage = () => {
   // mutation/field on the backend, swap the onSave handler below to call it.
   const [editingDescription, setEditingDescription] = useState(false);
   const [descriptionDraft, setDescriptionDraft] = useState('');
-
-  const toggleId = (setter: Dispatch<SetStateAction<Set<string>>>, id: string) => {
-    setter((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const toggleOutcome = (outcomeId: string) => toggleId(setCollapsedOutcomes, outcomeId);
-  const toggleOutput = (outputId: string) => toggleId(setCollapsedOutputs, outputId);
-  const toggleActivity = (activityId: string) => toggleId(setCollapsedActivities, activityId);
 
   const activityTotal = (activity: ProgramRecord['outcomes'][number]['outputs'][number]['activities'][number]) =>
     activity.budgetLines.reduce((sum, line) => sum + Number(line.totalAmount || 0), 0);
@@ -205,6 +195,9 @@ export const ProjectsPage = () => {
     setStructureDirty(false);
     setEditingDescription(false);
     setDescriptionDraft(selected?.description || '');
+    setSelectedOutcomeId(null);
+    setSelectedOutputId(null);
+    setSelectedActivityId(null);
   }, [programs, selectedProgramId]);
 
   const selectedProgram = draftProgram;
@@ -213,28 +206,12 @@ export const ProjectsPage = () => {
   // that pair, it just reads/writes through it.
   const adminOutcome = selectedProgram?.type === 'Admin' ? selectedProgram.outcomes[0] : undefined;
   const adminOutput = adminOutcome?.outputs[0];
-
-  const stats = useMemo(() => {
-    const totals = programs.reduce(
-      (acc, program) => {
-        acc.budget += Number(program.budgetAmount || 0);
-        acc.outcomes += program.outcomes.length;
-        for (const outcome of program.outcomes) {
-          acc.outputs += outcome.outputs.length;
-          for (const output of outcome.outputs) {
-            acc.activities += output.activities.length;
-            for (const activity of output.activities) {
-              acc.budgetLines += activity.budgetLines.length;
-            }
-          }
-        }
-        return acc;
-      },
-      { budget: 0, outcomes: 0, outputs: 0, activities: 0, budgetLines: 0 }
-    );
-
-    return { programs: programs.length, ...totals };
-  }, [programs]);
+  const selectedOutcome = selectedProgram?.outcomes.find((item) => item.id === selectedOutcomeId);
+  const selectedOutput = selectedOutcome?.outputs.find((item) => item.id === selectedOutputId);
+  const selectedActivity = (selectedProgram?.type === 'Admin'
+    ? adminOutput?.activities
+    : selectedOutput?.activities
+  )?.find((item) => item.id === selectedActivityId);
 
   const updateDraft = (updater: (program: ProgramRecord) => ProgramRecord) => {
     setDraftProgram((current) => {
@@ -327,16 +304,27 @@ export const ProjectsPage = () => {
     });
   };
 
-  const renameBudgetLine = (outcomeId: string, outputId: string, activityId: string, budgetLineId: string, name: string) => {
-    updateDraft((program) => {
-      const budgetLine = program.outcomes
-        .find((item) => item.id === outcomeId)
-        ?.outputs.find((item) => item.id === outputId)
-        ?.activities.find((item) => item.id === activityId)
-        ?.budgetLines.find((item) => item.id === budgetLineId);
-      if (budgetLine) budgetLine.name = name;
-      return program;
-    });
+  const handleSaveNodeName = () => {
+    if (!nodeEditor?.name.trim()) return;
+
+    if (nodeEditor.kind === 'outcome') {
+      renameOutcome(nodeEditor.outcomeId, nodeEditor.name.trim());
+    } else if (nodeEditor.kind === 'output' && nodeEditor.outputId) {
+      renameOutput(nodeEditor.outcomeId, nodeEditor.outputId, nodeEditor.name.trim());
+    } else if (
+      nodeEditor.kind === 'activity' &&
+      nodeEditor.outputId &&
+      nodeEditor.activityId
+    ) {
+      renameActivity(
+        nodeEditor.outcomeId,
+        nodeEditor.outputId,
+        nodeEditor.activityId,
+        nodeEditor.name.trim()
+      );
+    }
+
+    setNodeEditor(null);
   };
 
   const openBudgetLineSheet = (outcomeId: string, outputId: string, activityId: string, budgetLineId?: string) => {
@@ -441,7 +429,7 @@ export const ProjectsPage = () => {
     });
   };
 
-  const handleOpenCreateProgram = () => {
+  const handleOpenCreateProgram = useCallback(() => {
     setEditingProgramId(null);
     setProgramName('');
     setProgramDescription('');
@@ -450,7 +438,17 @@ export const ProjectsPage = () => {
     setProgramType('Activity');
     setCreateError('');
     setCreateOpen(true);
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!canManagePrograms) {
+      setPageActions([]);
+      return;
+    }
+
+    setPageActions([{ label: 'New Program', onClick: handleOpenCreateProgram, icon: 'plus' }]);
+    return () => setPageActions([]);
+  }, [canManagePrograms, handleOpenCreateProgram, setPageActions]);
 
   const handleOpenEditProgram = (program: ProgramRecord) => {
     setEditingProgramId(program.id);
@@ -595,32 +593,7 @@ export const ProjectsPage = () => {
 
   return (
     <Container>
-      <div className="py-6 lg:py-8 grid gap-5 lg:gap-7.5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="text-xl lg:text-2xl font-semibold text-slate-900">Programs Module</h1>
-            <p className="text-sm text-slate-500 mt-1">
-              Create programs first, assign a manager and budget, then build outcomes, outputs, activities, and budget lines.
-            </p>
-          </div>
-
-          {canManagePrograms && (
-            <button type="button" className="btn btn-primary" onClick={handleOpenCreateProgram}>
-              New Program
-            </button>
-          )}
-        </div>
-
-        {/* <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-          <StatCard label="Programs" value={stats.programs} />
-          <StatCard label="Total Budget" value={formatMoney(stats.budget)} />
-          <StatCard label="Outcomes" value={stats.outcomes} />
-          <StatCard label="Activities" value={stats.activities} />
-          <StatCard label="Budget Lines" value={stats.budgetLines} />
-        </div> */}
-
-        <Separator className="bg-slate-200" />
-
+      <div className="py-4 sm:py-5 lg:py-6">
         {loading ? (
           <div className="grid lg:grid-cols-3 gap-4">
             <div className="card p-4 lg:col-span-1 space-y-3">
@@ -642,23 +615,13 @@ export const ProjectsPage = () => {
         ) : (
           <div className="grid lg:grid-cols-3 gap-4">
             <aside className="card p-4 lg:col-span-1 space-y-2">
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex min-h-8 items-center justify-between gap-2">
                 <h3 className="text-sm font-semibold text-slate-900">Programs</h3>
-                {canManagePrograms && (
-                  <button type="button" className="btn btn-sm btn-light" onClick={handleOpenCreateProgram}>
-                    Create Program
-                  </button>
-                )}
               </div>
 
               {programs.length === 0 ? (
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-600 space-y-3">
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-600">
                   <p>No programs have been created yet.</p>
-                  {canManagePrograms && (
-                    <button type="button" className="btn btn-sm btn-primary" onClick={handleOpenCreateProgram}>
-                      Create First Program
-                    </button>
-                  )}
                 </div>
               ) : (
                 programs.map((program) => (
@@ -688,335 +651,428 @@ export const ProjectsPage = () => {
               )}
             </aside>
 
-            <section className="card p-4 lg:col-span-2 space-y-4">
+            <section className="card overflow-hidden lg:col-span-2">
               {!selectedProgram ? (
-                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-3">
-                  <p className="text-sm text-slate-500">Select a program to manage its hierarchy.</p>
-                  {canManagePrograms && (
-                    <button type="button" className="btn btn-primary" onClick={() => setCreateOpen(true)}>
-                      Create Program
-                    </button>
-                  )}
+                <div className="p-6">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-5 text-sm text-slate-600">
+                    Select a program to view its plan.
+                  </div>
                 </div>
               ) : (
                 <>
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="flex-1 min-w-[220px]">
-                      <h2 className="text-lg font-semibold text-slate-900">{selectedProgram.name}</h2>
-
-                      {editingDescription ? (
-                        <div className="mt-1 flex items-start gap-2">
-                          <input
-                            autoFocus
-                            className="input flex-1"
-                            value={descriptionDraft}
-                            placeholder="Add a brief program description..."
-                            onChange={(event) => setDescriptionDraft(event.target.value)}
-                            onKeyDown={(event) => {
-                              if (event.key === 'Enter') handleSaveDescription();
-                              if (event.key === 'Escape') {
-                                setDescriptionDraft(selectedProgram.description || '');
-                                setEditingDescription(false);
-                              }
-                            }}
-                          />
-                          <button type="button" className="btn btn-sm btn-primary" onClick={handleSaveDescription}>
-                            Save
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-sm btn-light"
-                            onClick={() => {
-                              setDescriptionDraft(selectedProgram.description || '');
-                              setEditingDescription(false);
-                            }}
-                          >
-                            Cancel
-                          </button>
+                  <div className="border-b border-slate-200 p-5 sm:p-6">
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h2 className="text-xl font-bold tracking-[-0.02em] text-[#172550]">
+                            {selectedProgram.name}
+                          </h2>
+                          <span className="rounded-full bg-[#e9f8fc] px-2.5 py-1 text-[11px] font-bold text-[#227f9e]">
+                            {selectedProgram.type === 'Admin' ? 'Administrative program' : 'Standard program'}
+                          </span>
+                          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-bold capitalize text-emerald-700">
+                            {selectedProgram.status}
+                          </span>
                         </div>
-                      ) : (
-                        <button
-                          type="button"
-                          className="mt-1 flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700"
-                          onClick={() => {
-                            setDescriptionDraft(selectedProgram.description || '');
-                            setEditingDescription(true);
-                          }}
-                        >
-                          <span>{selectedProgram.description || 'Add a brief program description...'}</span>
-                          <Pencil size={12} className="shrink-0 text-slate-400" />
-                        </button>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {selectedProgram.type === 'Admin' && (
-                        <span className="badge badge-outline border-purple-200 bg-purple-50 text-purple-700">Admin</span>
-                      )}
-                      <span className="badge badge-outline border-blue-200 bg-blue-50 text-blue-700">{selectedProgram.status}</span>
-                    </div>
-                  </div>
 
-                  <div className="grid md:grid-cols-3 gap-3">
-                    <div>
-                      <label className="form-label text-slate-900">Program Budget</label>
-                      <input className="input" value={formatMoney(selectedProgram.budgetAmount)} readOnly />
-                    </div>
-                    <div>
-                      <label className="form-label text-slate-900">Program Manager</label>
-                      <input className="input" value={selectedProgram.programManagerName || 'Unassigned'} readOnly />
-                    </div>
-                    
-                  </div>
-
-                  {/* {saveError && <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{saveError}</div>} */}
-
-                  {/* <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-800">
-                    Create the program first, then manually add outcomes, outputs, activities, and budget lines below.
-                  </div> */}
-
-                  {selectedProgram.type === 'Admin' ? (
-                    <>
-                      <div className="space-y-2 max-h-[600px] overflow-y-auto pr-1">
-                        {!adminOutcome || !adminOutput ? (
-                          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                            This admin program is missing its budget container. Please contact support.
-                          </div>
-                        ) : (
-                          adminOutput.activities.map((activity) => {
-                            const activityCollapsed = collapsedActivities.has(activity.id);
-                            return (
-                              <div key={activity.id} className="rounded-lg border border-purple-200 bg-purple-50/40 p-2">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <button
-                                    type="button"
-                                    className="btn btn-icon btn-sm btn-light shrink-0"
-                                    onClick={() => toggleActivity(activity.id)}
-                                    aria-label={activityCollapsed ? 'Expand activity' : 'Collapse activity'}
-                                  >
-                                    {activityCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
-                                  </button>
-                                  <span className="flex items-center text-purple-500 shrink-0">
-                                    <ChevronsRight size={14} />
-                                  </span>
-                                  <input
-                                    className="input flex-1 min-w-[160px]"
-                                    value={activity.name}
-                                    onChange={(event) => renameActivity(adminOutcome.id, adminOutput.id, activity.id, event.target.value)}
-                                  />
-                                  <input
-                                    className="input w-40 shrink-0"
-                                    value={formatMoney(activityTotal(activity))}
-                                    readOnly
-                                    title="Total budget for this activity"
-                                  />
-                                  <RowActionsMenu onRemove={() => removeActivity(adminOutcome.id, adminOutput.id, activity.id)} />
-                                </div>
-
-                                {!activityCollapsed && (
-                                  <div className="mt-2 space-y-2 pl-2 border-l-2 border-purple-200">
-                                    {activity.budgetLines.map((budgetLine) => (
-                                      <div key={budgetLine.id} className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-2">
-                                        <div className="flex flex-wrap items-center justify-between gap-2">
-                                          <div className="flex items-start gap-2 min-w-0">
-                                            <span className="flex items-center text-emerald-500 shrink-0 mt-0.5">
-                                              <ChevronsRight size={14} />
-                                              <ChevronsRight size={14} className="-ml-2" />
-                                            </span>
-                                            <div className="min-w-0">
-                                              <p className="text-sm font-medium text-slate-900 truncate">{budgetLine.name}</p>
-                                              <p className="text-xs text-slate-500">
-                                                {budgetLine.quantity} x {budgetLine.frequency} x {formatMoney(budgetLine.unitPrice)} = {formatMoney(budgetLine.totalAmount)} {budgetLine.units}
-                                              </p>
-                                            </div>
-                                          </div>
-                                          <div className="flex items-center gap-2 shrink-0">
-                                            <span className="text-sm font-semibold text-slate-900">{formatMoney(budgetLine.totalAmount)}</span>
-                                            <RowActionsMenu
-                                              editLabel="Edit"
-                                              onEdit={() => openBudgetLineSheet(adminOutcome.id, adminOutput.id, activity.id, budgetLine.id)}
-                                              onRemove={() => removeBudgetLine(adminOutcome.id, adminOutput.id, activity.id, budgetLine.id)}
-                                            />
-                                          </div>
-                                        </div>
-                                      </div>
-                                    ))}
-                                    <button type="button" className="btn btn-sm btn-light" onClick={() => addBudgetLine(adminOutcome.id, adminOutput.id, activity.id)}>
-                                      Add Budget Line
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })
-                        )}
-                      </div>
-                      <div className="flex items-end gap-2">
-                        <button
-                          type="button"
-                          className="btn btn-light"
-                          disabled={!adminOutcome || !adminOutput}
-                          onClick={() => adminOutcome && adminOutput && addActivity(adminOutcome.id, adminOutput.id)}
-                        >
-                          Add Activity
-                        </button>
-                        <button type="button" className="btn btn-success" onClick={handleSaveStructure} disabled={!structureDirty || savingStructure}>
-                          {savingStructure ? 'Saving...' : 'Save Structure'}
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                  <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
-                    {selectedProgram.outcomes.map((outcome) => {
-                      const outcomeCollapsed = collapsedOutcomes.has(outcome.id);
-                      return (
-                        <div key={outcome.id} className="rounded-lg border border-slate-200 bg-white p-3">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <button
-                              type="button"
-                              className="btn btn-icon btn-sm btn-light shrink-0"
-                              onClick={() => toggleOutcome(outcome.id)}
-                              aria-label={outcomeCollapsed ? 'Expand outcome' : 'Collapse outcome'}
-                            >
-                              {outcomeCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
-                            </button>
-                            <input className="input flex-1 min-w-[160px] font-medium" value={outcome.name} onChange={(event) => renameOutcome(outcome.id, event.target.value)} />
+                        {editingDescription ? (
+                          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                             <input
-                              className="input w-40 shrink-0"
-                              value={formatMoney(outcomeTotal(outcome))}
-                              readOnly
-                              title="Total budget for this outcome"
+                              autoFocus
+                              className="input flex-1"
+                              value={descriptionDraft}
+                              placeholder="Add a short description"
+                              onChange={(event) => setDescriptionDraft(event.target.value)}
+                              onKeyDown={(event) => {
+                                if (event.key === 'Enter') handleSaveDescription();
+                                if (event.key === 'Escape') {
+                                  setDescriptionDraft(selectedProgram.description || '');
+                                  setEditingDescription(false);
+                                }
+                              }}
                             />
-                            <RowActionsMenu onRemove={() => removeOutcome(outcome.id)} />
-                          </div>
-
-                          {!outcomeCollapsed && (
-                            <div className="mt-2 space-y-2 pl-2 border-l-2 border-slate-200">
-                              {outcome.outputs.map((output) => {
-                                const outputCollapsed = collapsedOutputs.has(output.id);
-                                return (
-                                  <div key={output.id} className="rounded-lg border border-blue-200 bg-blue-50/40 p-2">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <button
-                                        type="button"
-                                        className="btn btn-icon btn-sm btn-light shrink-0"
-                                        onClick={() => toggleOutput(output.id)}
-                                        aria-label={outputCollapsed ? 'Expand output' : 'Collapse output'}
-                                      >
-                                        {outputCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
-                                      </button>
-                                      <ArrowRight size={14} className="text-blue-500 shrink-0" />
-                                      <input className="input flex-1 min-w-[160px]" value={output.name} onChange={(event) => renameOutput(outcome.id, output.id, event.target.value)} />
-                                      <input
-                                        className="input w-40 shrink-0"
-                                        value={formatMoney(outputTotal(output))}
-                                        readOnly
-                                        title="Total budget for this output"
-                                      />
-                                      <RowActionsMenu onRemove={() => removeOutput(outcome.id, output.id)} />
-                                    </div>
-
-                                    {!outputCollapsed && (
-                                      <div className="mt-2 space-y-2 pl-2 border-l-2 border-blue-200">
-                                        {output.activities.map((activity) => {
-                                          const activityCollapsed = collapsedActivities.has(activity.id);
-                                          return (
-                                            <div key={activity.id} className="rounded-lg border border-purple-200 bg-purple-50/40 p-2">
-                                              <div className="flex flex-wrap items-center gap-2">
-                                                <button
-                                                  type="button"
-                                                  className="btn btn-icon btn-sm btn-light shrink-0"
-                                                  onClick={() => toggleActivity(activity.id)}
-                                                  aria-label={activityCollapsed ? 'Expand activity' : 'Collapse activity'}
-                                                >
-                                                  {activityCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
-                                                </button>
-                                                <span className="flex items-center text-purple-500 shrink-0">
-                                                  <ChevronsRight size={14} />
-                                                </span>
-                                                <input
-                                                  className="input flex-1 min-w-[160px]"
-                                                  value={activity.name}
-                                                  onChange={(event) => renameActivity(outcome.id, output.id, activity.id, event.target.value)}
-                                                />
-                                                <input
-                                                  className="input w-40 shrink-0"
-                                                  value={formatMoney(activityTotal(activity))}
-                                                  readOnly
-                                                  title="Total budget for this activity"
-                                                />
-                                                <RowActionsMenu onRemove={() => removeActivity(outcome.id, output.id, activity.id)} />
-                                              </div>
-
-                                              {!activityCollapsed && (
-                                                <div className="mt-2 space-y-2 pl-2 border-l-2 border-purple-200">
-                                                  {activity.budgetLines.map((budgetLine) => (
-                                                    <div key={budgetLine.id} className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-2">
-                                                      <div className="flex flex-wrap items-center justify-between gap-2">
-                                                        <div className="flex items-start gap-2 min-w-0">
-                                                          <span className="flex items-center text-emerald-500 shrink-0 mt-0.5">
-                                                            <ChevronsRight size={14} />
-                                                            <ChevronsRight size={14} className="-ml-2" />
-                                                          </span>
-                                                          <div className="min-w-0">
-                                                            <p className="text-sm font-medium text-slate-900 truncate">{budgetLine.name}</p>
-                                                            <p className="text-xs text-slate-500">
-                                                              {budgetLine.quantity} x {budgetLine.frequency} x {formatMoney(budgetLine.unitPrice)} = {formatMoney(budgetLine.totalAmount)} {budgetLine.units}
-                                                            </p>
-                                                          </div>
-                                                        </div>
-                                                        <div className="flex items-center gap-2 shrink-0">
-                                                          <span className="text-sm font-semibold text-slate-900">{formatMoney(budgetLine.totalAmount)}</span>
-                                                          <RowActionsMenu
-                                                            editLabel="Edit"
-                                                            onEdit={() => openBudgetLineSheet(outcome.id, output.id, activity.id, budgetLine.id)}
-                                                            onRemove={() => removeBudgetLine(outcome.id, output.id, activity.id, budgetLine.id)}
-                                                          />
-                                                        </div>
-                                                      </div>
-                                                    </div>
-                                                  ))}
-                                                  <button type="button" className="btn btn-sm btn-light" onClick={() => addBudgetLine(outcome.id, output.id, activity.id)}>
-                                                    Add Budget Line
-                                                  </button>
-                                                </div>
-                                              )}
-                                            </div>
-                                          );
-                                        })}
-                                        <button type="button" className="btn btn-sm btn-light" onClick={() => addActivity(outcome.id, output.id)}>
-                                          Add Activity
-                                        </button>
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                              <button type="button" className="btn btn-sm btn-light" onClick={() => addOutput(outcome.id)}>
-                                Add Output
+                            <div className="flex gap-2">
+                              <button type="button" className="btn btn-sm btn-primary" onClick={handleSaveDescription}>Save</button>
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-light"
+                                onClick={() => {
+                                  setDescriptionDraft(selectedProgram.description || '');
+                                  setEditingDescription(false);
+                                }}
+                              >
+                                Cancel
                               </button>
                             </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            className="mt-2 flex max-w-2xl items-center gap-1.5 text-left text-sm text-slate-500 outline-none hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-[#2aaed3]"
+                            onClick={() => {
+                              setDescriptionDraft(selectedProgram.description || '');
+                              setEditingDescription(true);
+                            }}
+                          >
+                            <span>{selectedProgram.description || 'Add a short program description'}</span>
+                            <Pencil size={12} className="shrink-0" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <dl className="mt-5 grid gap-3 sm:grid-cols-3">
+                      <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+                        <dt className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400">Total budget</dt>
+                        <dd className="mt-1 text-sm font-bold text-slate-800">{formatMoney(selectedProgram.budgetAmount)}</dd>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+                        <dt className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400">Program manager</dt>
+                        <dd className="mt-1 truncate text-sm font-bold text-slate-800">{selectedProgram.programManagerName || 'Not assigned'}</dd>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+                        <dt className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400">Plan summary</dt>
+                        <dd className="mt-1 text-sm font-bold text-slate-800">
+                          {selectedProgram.type === 'Admin'
+                            ? `${adminOutput?.activities.length || 0} activities`
+                            : `${selectedProgram.outcomes.length} outcomes`}
+                        </dd>
+                      </div>
+                    </dl>
                   </div>
-                  <div className="flex items-end gap-2">
-                      <button type="button" className="btn btn-light" onClick={addOutcome}>
-                        Add Outcome
+
+                  <div className="p-5 sm:p-6">
+                    <nav aria-label="Program plan location" className="mb-5 flex flex-wrap items-center gap-1.5 text-xs font-semibold">
+                      <button
+                        type="button"
+                        className="rounded-md px-2 py-1 text-[#227f9e] hover:bg-[#e9f8fc]"
+                        onClick={() => {
+                          setSelectedOutcomeId(null);
+                          setSelectedOutputId(null);
+                          setSelectedActivityId(null);
+                        }}
+                      >
+                        Program plan
                       </button>
-                      <button type="button" className="btn btn-success" onClick={handleSaveStructure} disabled={!structureDirty || savingStructure}>
-                        {savingStructure ? 'Saving...' : 'Save Structure'}
+                      {selectedProgram.type !== 'Admin' && selectedOutcome && (
+                        <>
+                          <ChevronRight className="size-3.5 text-slate-300" />
+                          <button
+                            type="button"
+                            className="max-w-48 truncate rounded-md px-2 py-1 text-[#227f9e] hover:bg-[#e9f8fc]"
+                            onClick={() => {
+                              setSelectedOutputId(null);
+                              setSelectedActivityId(null);
+                            }}
+                          >
+                            {selectedOutcome.name}
+                          </button>
+                        </>
+                      )}
+                      {selectedProgram.type !== 'Admin' && selectedOutput && (
+                        <>
+                          <ChevronRight className="size-3.5 text-slate-300" />
+                          <button
+                            type="button"
+                            className="max-w-48 truncate rounded-md px-2 py-1 text-[#227f9e] hover:bg-[#e9f8fc]"
+                            onClick={() => setSelectedActivityId(null)}
+                          >
+                            {selectedOutput.name}
+                          </button>
+                        </>
+                      )}
+                      {selectedActivity && (
+                        <>
+                          <ChevronRight className="size-3.5 text-slate-300" />
+                          <span className="max-w-48 truncate rounded-md px-2 py-1 text-slate-500">{selectedActivity.name}</span>
+                        </>
+                      )}
+                    </nav>
+
+                    <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+                      <div>
+                        <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#2aaed3]">
+                          {selectedActivity ? 'Budget level' : selectedOutput ? 'Activity level' : selectedOutcome ? 'Output level' : selectedProgram.type === 'Admin' ? 'Activity level' : 'Outcome level'}
+                        </p>
+                        <h3 className="mt-1 text-lg font-bold text-[#172550]">
+                          {selectedActivity ? 'Budget items' : selectedOutput ? 'Activities' : selectedOutcome ? 'Outputs' : selectedProgram.type === 'Admin' ? 'Activities' : 'Outcomes'}
+                        </h3>
+                        <p className="mt-1 text-sm text-slate-500">
+                          {selectedActivity
+                            ? `Costs required to complete ${selectedActivity.name}.`
+                            : selectedOutput
+                              ? `The work needed to deliver ${selectedOutput.name}.`
+                              : selectedOutcome
+                                ? `The measurable results that support ${selectedOutcome.name}.`
+                                : selectedProgram.type === 'Admin'
+                                  ? 'The work carried out under this administrative program.'
+                                  : 'The changes this program is expected to achieve.'}
+                        </p>
+                      </div>
+
+                      {canManagePrograms && !selectedActivity && (
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          disabled={selectedProgram.type === 'Admin' && (!adminOutcome || !adminOutput)}
+                          onClick={() => {
+                            if (selectedOutput && selectedOutcome) addActivity(selectedOutcome.id, selectedOutput.id);
+                            else if (selectedOutcome) addOutput(selectedOutcome.id);
+                            else if (selectedProgram.type === 'Admin' && adminOutcome && adminOutput) addActivity(adminOutcome.id, adminOutput.id);
+                            else addOutcome();
+                          }}
+                        >
+                          {selectedOutput
+                            ? `Add activity`
+                            : selectedOutcome
+                              ? 'Add output'
+                              : selectedProgram.type === 'Admin'
+                                ? 'Add activity'
+                                : 'Add outcome'}
+                        </button>
+                      )}
+
+                      {canManagePrograms && selectedActivity && (
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          onClick={() => {
+                            if (selectedProgram.type === 'Admin' && adminOutcome && adminOutput) {
+                              addBudgetLine(adminOutcome.id, adminOutput.id, selectedActivity.id);
+                            } else if (selectedOutcome && selectedOutput) {
+                              addBudgetLine(selectedOutcome.id, selectedOutput.id, selectedActivity.id);
+                            }
+                          }}
+                        >
+                          Add budget item
+                        </button>
+                      )}
+                    </div>
+
+                    {!adminOutcome && selectedProgram.type === 'Admin' ? (
+                      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                        This program is missing its activity container. Contact support to restore it.
+                      </div>
+                    ) : selectedActivity ? (
+                      <div className="space-y-3">
+                        {selectedActivity.budgetLines.length === 0 ? (
+                          <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-7 text-center text-sm text-slate-500">
+                            No budget items have been added to this activity.
+                          </div>
+                        ) : (
+                          selectedActivity.budgetLines.map((budgetLine) => (
+                            <div key={budgetLine.id} className="rounded-xl border border-slate-200 bg-white p-4">
+                              <div className="flex flex-wrap items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <p className="text-sm font-bold text-slate-900">{budgetLine.name}</p>
+                                  <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2 text-xs text-slate-500">
+                                    <span><strong className="font-semibold text-slate-700">Quantity:</strong> {budgetLine.quantity}</span>
+                                    <span><strong className="font-semibold text-slate-700">Frequency:</strong> {budgetLine.frequency}</span>
+                                    <span><strong className="font-semibold text-slate-700">Unit cost:</strong> {formatMoney(budgetLine.unitPrice)}</span>
+                                    {budgetLine.units && <span><strong className="font-semibold text-slate-700">Unit:</strong> {budgetLine.units}</span>}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <div className="text-right">
+                                    <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Total</p>
+                                    <p className="text-sm font-bold text-[#172550]">{formatMoney(budgetLine.totalAmount)}</p>
+                                  </div>
+                                  {canManagePrograms && (
+                                    <RowActionsMenu
+                                      editLabel="Edit budget item"
+                                      onEdit={() => {
+                                        if (selectedProgram.type === 'Admin' && adminOutcome && adminOutput) {
+                                          openBudgetLineSheet(adminOutcome.id, adminOutput.id, selectedActivity.id, budgetLine.id);
+                                        } else if (selectedOutcome && selectedOutput) {
+                                          openBudgetLineSheet(selectedOutcome.id, selectedOutput.id, selectedActivity.id, budgetLine.id);
+                                        }
+                                      }}
+                                      onRemove={() => {
+                                        if (selectedProgram.type === 'Admin' && adminOutcome && adminOutput) {
+                                          removeBudgetLine(adminOutcome.id, adminOutput.id, selectedActivity.id, budgetLine.id);
+                                        } else if (selectedOutcome && selectedOutput) {
+                                          removeBudgetLine(selectedOutcome.id, selectedOutput.id, selectedActivity.id, budgetLine.id);
+                                        }
+                                      }}
+                                    />
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    ) : selectedOutput && selectedOutcome ? (
+                      <div className="space-y-3">
+                        {selectedOutput.activities.length === 0 ? (
+                          <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-7 text-center text-sm text-slate-500">No activities have been added to this output.</div>
+                        ) : selectedOutput.activities.map((activity, index) => (
+                          <div key={activity.id} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3.5">
+                            <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setSelectedActivityId(activity.id)}>
+                              <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-purple-500">Activity {index + 1}</p>
+                              <p className="mt-1 truncate text-sm font-bold text-slate-900">{activity.name}</p>
+                              <p className="mt-1 text-xs text-slate-500">{activity.budgetLines.length} budget items · {formatMoney(activityTotal(activity))}</p>
+                            </button>
+                            {canManagePrograms && (
+                              <RowActionsMenu
+                                onEdit={() => setNodeEditor({ kind: 'activity', name: activity.name, outcomeId: selectedOutcome.id, outputId: selectedOutput.id, activityId: activity.id })}
+                                onRemove={() => removeActivity(selectedOutcome.id, selectedOutput.id, activity.id)}
+                              />
+                            )}
+                            <ChevronRight className="size-4 shrink-0 text-slate-300" />
+                          </div>
+                        ))}
+                      </div>
+                    ) : selectedOutcome ? (
+                      <div className="space-y-3">
+                        {selectedOutcome.outputs.length === 0 ? (
+                          <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-7 text-center text-sm text-slate-500">No outputs have been added to this outcome.</div>
+                        ) : selectedOutcome.outputs.map((output, index) => (
+                          <div key={output.id} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3.5">
+                            <button type="button" className="min-w-0 flex-1 text-left" onClick={() => { setSelectedOutputId(output.id); setSelectedActivityId(null); }}>
+                              <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-blue-500">Output {index + 1}</p>
+                              <p className="mt-1 truncate text-sm font-bold text-slate-900">{output.name}</p>
+                              <p className="mt-1 text-xs text-slate-500">{output.activities.length} activities · {formatMoney(outputTotal(output))}</p>
+                            </button>
+                            {canManagePrograms && (
+                              <RowActionsMenu
+                                onEdit={() => setNodeEditor({ kind: 'output', name: output.name, outcomeId: selectedOutcome.id, outputId: output.id })}
+                                onRemove={() => removeOutput(selectedOutcome.id, output.id)}
+                              />
+                            )}
+                            <ChevronRight className="size-4 shrink-0 text-slate-300" />
+                          </div>
+                        ))}
+                      </div>
+                    ) : selectedProgram.type === 'Admin' && adminOutcome && adminOutput ? (
+                      <div className="space-y-3">
+                        {adminOutput.activities.length === 0 ? (
+                          <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-7 text-center text-sm text-slate-500">No activities have been added to this program.</div>
+                        ) : adminOutput.activities.map((activity, index) => (
+                          <div key={activity.id} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3.5">
+                            <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setSelectedActivityId(activity.id)}>
+                              <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-purple-500">Activity {index + 1}</p>
+                              <p className="mt-1 truncate text-sm font-bold text-slate-900">{activity.name}</p>
+                              <p className="mt-1 text-xs text-slate-500">{activity.budgetLines.length} budget items · {formatMoney(activityTotal(activity))}</p>
+                            </button>
+                            {canManagePrograms && (
+                              <RowActionsMenu
+                                onEdit={() => setNodeEditor({ kind: 'activity', name: activity.name, outcomeId: adminOutcome.id, outputId: adminOutput.id, activityId: activity.id })}
+                                onRemove={() => removeActivity(adminOutcome.id, adminOutput.id, activity.id)}
+                              />
+                            )}
+                            <ChevronRight className="size-4 shrink-0 text-slate-300" />
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {selectedProgram.outcomes.length === 0 ? (
+                          <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-7 text-center text-sm text-slate-500">No outcomes have been added to this program.</div>
+                        ) : selectedProgram.outcomes.map((outcome, index) => {
+                          const activityCount = outcome.outputs.reduce((total, output) => total + output.activities.length, 0);
+                          return (
+                            <div key={outcome.id} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3.5">
+                              <button type="button" className="min-w-0 flex-1 text-left" onClick={() => { setSelectedOutcomeId(outcome.id); setSelectedOutputId(null); setSelectedActivityId(null); }}>
+                                <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[#2aaed3]">Outcome {index + 1}</p>
+                                <p className="mt-1 truncate text-sm font-bold text-slate-900">{outcome.name}</p>
+                                <p className="mt-1 text-xs text-slate-500">{outcome.outputs.length} outputs · {activityCount} activities · {formatMoney(outcomeTotal(outcome))}</p>
+                              </button>
+                              {canManagePrograms && (
+                                <RowActionsMenu
+                                  onEdit={() => setNodeEditor({ kind: 'outcome', name: outcome.name, outcomeId: outcome.id })}
+                                  onRemove={() => removeOutcome(outcome.id)}
+                                />
+                              )}
+                              <ChevronRight className="size-4 shrink-0 text-slate-300" />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    <div className={clsx(
+                      'mt-6 flex flex-col gap-3 rounded-xl border px-4 py-3 sm:flex-row sm:items-center sm:justify-between',
+                      structureDirty ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-slate-50'
+                    )}>
+                      <div>
+                        <p className={clsx('text-sm font-bold', structureDirty ? 'text-amber-900' : 'text-slate-700')}>
+                          {structureDirty ? 'You have unsaved changes' : 'All plan changes are saved'}
+                        </p>
+                        <p className="mt-0.5 text-xs text-slate-500">
+                          {structureDirty ? 'Save before leaving this program.' : 'Edit or add an item to update this plan.'}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-primary shrink-0"
+                        onClick={handleSaveStructure}
+                        disabled={!structureDirty || savingStructure}
+                      >
+                        {savingStructure ? 'Saving changes…' : 'Save changes'}
                       </button>
                     </div>
-                    </>
-                  )}
+                  </div>
                 </>
               )}
             </section>
           </div>
         )}
       </div>
+
+      <Dialog
+        open={Boolean(nodeEditor)}
+        onOpenChange={(open) => {
+          if (!open) setNodeEditor(null);
+        }}
+      >
+        <DialogContent className="max-w-md p-0">
+          <DialogHeader className="border-b border-slate-100 px-5 py-4">
+            <DialogTitle className="text-base font-semibold capitalize text-slate-900">
+              Edit {nodeEditor?.kind}
+            </DialogTitle>
+            <DialogDescription>
+              Use a short, clear name that team members will recognize.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 p-5">
+            <div>
+              <label className="form-label capitalize text-slate-900">
+                {nodeEditor?.kind} name
+              </label>
+              <input
+                autoFocus
+                className="input"
+                value={nodeEditor?.name || ''}
+                onChange={(event) =>
+                  setNodeEditor((current) =>
+                    current ? { ...current, name: event.target.value } : current
+                  )
+                }
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') handleSaveNodeName();
+                  if (event.key === 'Escape') setNodeEditor(null);
+                }}
+              />
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button type="button" className="btn btn-light" onClick={() => setNodeEditor(null)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={!nodeEditor?.name.trim()}
+                onClick={handleSaveNodeName}
+              >
+                Save changes
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="max-w-xl p-0">
@@ -1062,7 +1118,7 @@ export const ProjectsPage = () => {
               {editingProgramId ? (
                 <input
                   className="input"
-                  value={programType === 'Admin' ? 'Admin (activities & budget lines only)' : 'Activity (full hierarchy)'}
+                  value={programType === 'Admin' ? 'Administrative program' : 'Standard program'}
                   readOnly
                   title="Program type is locked after creation."
                 />
@@ -1077,7 +1133,7 @@ export const ProjectsPage = () => {
                       onChange={() => setProgramType('Activity')}
                     />
                     <span>
-                      <span className="font-medium text-slate-900">Activity</span> — full outcome / output / activity / budget line hierarchy.
+                      <span className="font-medium text-slate-900">Standard program</span> — outcomes, outputs, activities, and budget items.
                     </span>
                   </label>
                   <label className="flex items-start gap-2 text-sm text-slate-700">
@@ -1089,7 +1145,7 @@ export const ProjectsPage = () => {
                       onChange={() => setProgramType('Admin')}
                     />
                     <span>
-                      <span className="font-medium text-slate-900">Admin</span> — activities and budget lines only, no outcomes/outputs.
+                      <span className="font-medium text-slate-900">Administrative program</span> — activities and budget items only.
                     </span>
                   </label>
                 </div>
@@ -1098,7 +1154,7 @@ export const ProjectsPage = () => {
 
             {!editingProgramId && (
               <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-800">
-                This creates the program first. The hierarchy is added from the selected program view.
+                After creating the program, you can build its plan from the program workspace.
               </div>
             )}
 
@@ -1125,7 +1181,7 @@ export const ProjectsPage = () => {
         <DialogContent className="sm:max-w-xl p-0 overflow-y-auto max-h-[90vh]">
           <div className="p-6 border-b bg-slate-50/50">
             <DialogHeader>
-              <DialogTitle className="text-2xl font-bold text-slate-900">Budget Line Input</DialogTitle>
+              <DialogTitle className="text-2xl font-bold text-slate-900">Budget item</DialogTitle>
               <DialogDescription>
                 Enter quantity, frequency, unit price, and units. The total is calculated automatically.
               </DialogDescription>
@@ -1136,12 +1192,12 @@ export const ProjectsPage = () => {
             {budgetDraft && (
               <>
                 <div>
-                  <label className="form-label text-slate-900">Budget Line Name</label>
+                  <label className="form-label text-slate-900">Item name</label>
                   <input
                     className="input"
                     value={budgetDraft.name}
                     onChange={(event) => setBudgetDraft((current) => current ? { ...current, name: event.target.value } : current)}
-                    placeholder="Budget line name"
+                    placeholder="Budget item name"
                   />
                 </div>
 
@@ -1199,7 +1255,7 @@ export const ProjectsPage = () => {
                     Cancel
                   </button>
                   <button type="button" className="btn btn-primary" onClick={handleSaveBudgetLine}>
-                    Save Budget Line
+                    Save budget item
                   </button>
                 </div>
               </>

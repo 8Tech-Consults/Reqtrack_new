@@ -3,11 +3,6 @@ import { useApolloClient, useMutation, useQuery } from "@apollo/client/react";
 import { LOAD_USERS, ROLES } from "@/gql/queries";
 import { CREATE_USER, DELETE_USER } from "@/gql/mutations";
 import { Container } from "@/components/container";
-import {
-  Toolbar,
-  ToolbarActions,
-  ToolbarHeading,
-} from "@/layouts/demo1/toolbar";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -43,6 +38,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { URL_2 } from "@/config/urls";
+import { useDemo8Layout } from "@/layouts/demo8";
 
 type User = {
   id: string | number;
@@ -407,6 +403,7 @@ const UserPreviewDialog = ({
 
 const UsersListPage = () => {
   const apolloClient = useApolloClient();
+  const { setPageActions } = useDemo8Layout();
   const [refreshKey, setRefreshKey] = useState(0);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const { data: rolesData, loading: rolesLoading, error: rolesError } = useQuery<RolesResponse>(ROLES);
@@ -486,15 +483,34 @@ const UsersListPage = () => {
     [apolloClient],
   );
 
-  const handleRefresh = () => {
+  const handleRefresh = useCallback(() => {
     setFetchError(null);
     setRefreshKey((prev) => prev + 1);
-  };
+  }, []);
 
-  const handleCreate = () => {
+  const handleCreate = useCallback(() => {
     setEditingUser(null);
     setIsFormOpen(true);
-  };
+  }, []);
+
+  useEffect(() => {
+    setPageActions([
+      {
+        label: "Refresh",
+        onClick: handleRefresh,
+        variant: "secondary",
+        icon: "refresh",
+      },
+      {
+        label: "New User",
+        onClick: handleCreate,
+        icon: "plus",
+        disabled: rolesLoading,
+      },
+    ]);
+
+    return () => setPageActions([]);
+  }, [handleCreate, handleRefresh, rolesLoading, setPageActions]);
   const handleEdit = (user: User) => {
     setEditingUser(user);
     setIsFormOpen(true);
@@ -531,35 +547,7 @@ const UsersListPage = () => {
   return (
     <>
       <Container>
-        <Toolbar>
-          <ToolbarHeading
-            title="Users"
-            description="Manage users and their roles"
-          />
-          <ToolbarActions>
-            <button
-              type="button"
- 
-              className="btn btn-sm btn-light"
-              onClick={handleRefresh}
-            >
-              Refresh
-            </button>
-            <button
-              type="button"
-              className="btn btn-sm btn-primary"
-              onClick={handleCreate}
-              disabled={rolesLoading}
-            >
-              New User
-            </button>
-
-            
-            
-          </ToolbarActions>
-        </Toolbar>
-      </Container>
-      <Container className="py-0">
+        <div className="py-4 sm:py-5 lg:py-6">
         {rolesError && (
           <div className="alert alert-danger mb-4">
             <div className="alert-title">Unable to load roles</div>
@@ -580,6 +568,7 @@ const UsersListPage = () => {
           onDelete={(u) => handleDelete(u)}
           deletingId={deletingId}
         />
+        </div>
       </Container>
 
       <UserFormDialog
@@ -770,12 +759,15 @@ const UsersDataGrid = ({
     };
 
     return (
-      <div className="card-header flex-wrap gap-2 border-b-0 px-5">
-        <h3 className="card-title font-medium text-sm">
-          {loading ? "Loading users..." : `Showing ${totalRows} users`}
-        </h3>
-        <div className="flex flex-wrap items-center gap-2 lg:gap-3">
-          <label className="input input-sm w-[220px]">
+      <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-4 lg:flex-row lg:items-center lg:justify-between sm:px-5">
+        <div className="min-w-0">
+          <h2 className="text-base font-bold tracking-[-0.01em] text-[#172550] sm:text-lg">User accounts</h2>
+          <p className="mt-1 text-xs text-slate-500">
+            {loading ? "Loading user accounts…" : `${totalRows} user accounts`}
+          </p>
+        </div>
+        <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap lg:w-auto lg:justify-end">
+          <label className="input h-10 w-full sm:w-[220px]">
             <KeenIcon icon="magnifier" />
             <input
               type="text"
@@ -799,7 +791,7 @@ const UsersDataGrid = ({
               table.setPageIndex(0);
             }}
           >
-            <SelectTrigger className="h-9 w-[170px]">
+            <SelectTrigger className="h-10 w-full sm:w-[170px]">
               <SelectValue placeholder="All roles" />
             </SelectTrigger>
             <SelectContent>
@@ -812,7 +804,7 @@ const UsersDataGrid = ({
             </SelectContent>
           </Select>
 
-          <label className="input input-sm w-[170px]">
+          <label className="input h-10 w-full sm:w-[170px]">
             <input
               type="text"
               placeholder="District"
@@ -829,7 +821,7 @@ const UsersDataGrid = ({
           {/* <Button  className="btn btn-sm btn-light"  variant="outline" size="sm" onClick={onRetry}>
             Export
           </Button> */}
-          <Button variant="ghost" size="sm" onClick={clearFilters}>
+          <Button variant="ghost" size="sm" className="h-10 self-start sm:self-auto" onClick={clearFilters}>
             Clear
           </Button>
 
@@ -840,7 +832,7 @@ const UsersDataGrid = ({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 [&_[data-pagination]]:!border-t [&_[data-pagination]]:!border-slate-100 [&_[data-pagination]]:!bg-slate-50/40 [&_[data-pagination]]:!px-4 [&_[data-pagination]]:!py-4 sm:[&_[data-pagination]]:!px-5">
       {fetchError && (
         <div className="alert alert-danger">
           <div className="alert-title">Failed to load users</div>

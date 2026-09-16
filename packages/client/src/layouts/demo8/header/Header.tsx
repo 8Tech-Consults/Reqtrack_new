@@ -43,8 +43,7 @@ const Header = () => {
   const [searchModalOpen, setSearchModalOpen] = useState(false);
 
   const displayName =
-    currentUser?.fullname ||
-    [currentUser?.first_name, currentUser?.last_name].filter(Boolean).join(' ') ||
+    currentUser?.name ||
     currentUser?.username ||
     'Account';
   const initials = displayName
@@ -53,7 +52,7 @@ const Header = () => {
     .join('')
     .slice(0, 2)
     .toUpperCase();
-  const workspaceName = currentUser?.companyName || 'NAD Workspace';
+  const workspaceName = 'NAD Workspace';
 
   const actionClass =
     'ease-premium relative inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-white/[0.06] text-white/80 outline-none transition-[background-color,color,transform] duration-150 hover:bg-white/[0.13] hover:text-white focus-visible:ring-2 focus-visible:ring-[#72d6ee] focus-visible:ring-offset-2 focus-visible:ring-offset-[#172550] active:scale-[0.96] motion-reduce:transition-none motion-reduce:transform-none xl:size-11';
@@ -139,7 +138,7 @@ const Header = () => {
               <Plus className="size-5" />
             </Link>
 
-            <button
+            {/* <button
               type="button"
               className={actionClass}
               onClick={() => setSearchModalOpen(true)}
@@ -147,9 +146,9 @@ const Header = () => {
               title="Search"
             >
               <Search className="size-5" />
-            </button>
+            </button> */}
 
-            <div className="hidden xl:block">
+            {/* <div className="hidden xl:block">
               <AppMenu>
                 <MenuItem
                   ref={itemChatRef}
@@ -164,7 +163,7 @@ const Header = () => {
                   {DropdownChat({ menuTtemRef: itemChatRef })}
                 </MenuItem>
               </AppMenu>
-            </div>
+            </div> */}
 
             <Link
               to="/account/home/get-started"
@@ -175,7 +174,7 @@ const Header = () => {
               <CircleHelp className="size-5" />
             </Link>
 
-            <div className="hidden xl:block">
+            {/* <div className="hidden xl:block">
               <AppMenu>
                 <MenuItem
                   ref={itemNotificationsRef}
@@ -190,7 +189,7 @@ const Header = () => {
                   {DropdownNotifications({ menuTtemRef: itemNotificationsRef })}
                 </MenuItem>
               </AppMenu>
-            </div>
+            </div> */}
 
             <div className="hidden xl:block">
               <AppMenu>

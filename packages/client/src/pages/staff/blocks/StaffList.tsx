@@ -248,9 +248,31 @@ const StaffList = ({
   );
 
   return (
-    <div className="mb-8 bg-white p-6 rounded shadow">
+    <section className="mb-8 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+      <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+        <div className="min-w-0">
+          <h2 className="text-base font-bold tracking-[-0.01em] text-[#172550] sm:text-lg">Staff directory</h2>
+          <p className="mt-1 text-xs text-slate-500">Staff records, roles, contact details, and contracts.</p>
+        </div>
+
+        <div className="flex w-full items-center gap-3 sm:max-w-sm">
+          <label className="relative block min-w-0 flex-1">
+            <span className="sr-only">Search staff</span>
+            <KeenIcon icon="magnifier" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="search"
+              placeholder="Search staff"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="input h-10 w-full pl-9"
+            />
+          </label>
+          {loading && <span className="shrink-0 text-xs text-slate-500">Loading…</span>}
+        </div>
+      </div>
+
       {error && (
-        <div className="alert alert-danger mb-4" role="alert">
+        <div className="alert alert-danger mx-4 mt-4 sm:mx-5" role="alert">
           <div className="text-sm">Failed to load staff.</div>
           <button type="button" className="btn btn-xs btn-light" onClick={() => refetch()}>
             Retry
@@ -258,26 +280,17 @@ const StaffList = ({
         </div>
       )}
 
-      <div className="mb-4 flex items-center gap-3">
-        <input
-          type="text"
-          placeholder="Search staff..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="input input-bordered w-full max-w-xs"
+      <div className="[&_[data-container]]:rounded-none [&_[data-container]]:border-x-0 [&_[data-container]]:border-t-0 [&_[data-pagination]]:border-t [&_[data-pagination]]:border-slate-100 [&_[data-pagination]]:bg-slate-50/40 [&_[data-pagination]]:px-4 [&_[data-pagination]]:py-4 sm:[&_[data-pagination]]:px-5">
+        <DataGrid
+          columns={columns}
+          data={filteredStaff}
+          pagination={{ size: 10, sizes: [10, 20, 50] }}
+          messages={{
+            loading: 'Loading staff...',
+            empty: searchTerm ? 'No staff match your search.' : 'No staff available.',
+          }}
         />
-        {loading && <span className="text-xs text-gray-500">Loading staff...</span>}
       </div>
-
-      <DataGrid
-        columns={columns}
-        data={filteredStaff}
-        pagination={{ size: 10, sizes: [10, 20, 50] }}
-        messages={{
-          loading: 'Loading staff...',
-          empty: searchTerm ? 'No staff match your search.' : 'No staff available.',
-        }}
-      />
 
       <StaffFormSheet
         open={createOpen}
@@ -295,7 +308,7 @@ const StaffList = ({
         roleOptions={roleOptions}
       />
       <StaffDetailSheet open={detailOpen} onOpenChange={setDetailOpen} detailRow={detailRow} />
-    </div>
+    </section>
   );
 };
 
