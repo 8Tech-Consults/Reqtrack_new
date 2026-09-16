@@ -2,13 +2,10 @@ import { useRef, useState } from 'react';
 import {
   Bell,
   ChevronDown,
-  CircleHelp,
   Grid3X3,
   Menu as MenuIcon,
   MessageCircle,
-  MoreVertical,
-  Plus,
-  Search
+  Plus
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Menu as AppMenu, MenuItem, MenuToggle } from '@/components';
@@ -43,10 +40,16 @@ const Header = () => {
   const itemMobileUserRef = useRef<any>(null);
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const { count: unreadNotificationsCount } = useUnreadNotificationsCount();
+  const profile = currentUser as typeof currentUser & {
+    fullname?: string;
+    first_name?: string;
+    last_name?: string;
+    companyName?: string;
+  };
 
   const displayName =
-    currentUser?.fullname ||
-    [currentUser?.first_name, currentUser?.last_name].filter(Boolean).join(' ') ||
+    profile?.fullname ||
+    [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') ||
     currentUser?.name ||
     currentUser?.username ||
     'Account';
@@ -56,7 +59,7 @@ const Header = () => {
     .join('')
     .slice(0, 2)
     .toUpperCase();
-  const workspaceName = currentUser?.companyName || 'NAD Workspace';
+  const workspaceName = profile?.companyName || 'NAD Workspace';
 
   const actionClass =
     'ease-premium relative inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-white/[0.06] text-white/80 outline-none transition-[background-color,color,transform] duration-150 hover:bg-white/[0.13] hover:text-white focus-visible:ring-2 focus-visible:ring-[#72d6ee] focus-visible:ring-offset-2 focus-visible:ring-offset-[#172550] active:scale-[0.96] motion-reduce:transition-none motion-reduce:transform-none xl:size-11';
@@ -181,9 +184,9 @@ const Header = () => {
                 on most laptop/desktop screens even though this whole bar only
                 renders at lg (1024px) and up. Matched to the bar's own
                 breakpoint instead. */}
-            <Link to="/account/home/get-started" className={actionClass + ' hidden lg:inline-flex'} aria-label="Help" title="Help">
+            {/* <Link to="/account/home/get-started" className={actionClass + ' hidden lg:inline-flex'} aria-label="Help" title="Help">
               <CircleHelp className="size-5" />
-            </Link>
+            </Link> */}
 
             {/* Was hidden until xl (1280px) — between 1024 and 1280px this
                 left notifications and apps invisible with nothing standing
@@ -267,41 +270,7 @@ const Header = () => {
               <Plus className="size-5" />
             </Link>
 
-            <DropdownMenu modal={false}>
-              <DropdownMenuTrigger asChild>
-                <button type="button" className={mobileActionClass} aria-label="More actions">
-                  <MoreVertical className="size-5" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="end"
-                sideOffset={9}
-                className="w-56 max-w-[calc(100vw-2rem)] rounded-xl border-slate-200 bg-white p-2 text-[#172550] shadow-[0_18px_50px_rgba(16,35,72,0.22)]"
-              >
-                {/* <DropdownMenuItem
-                  className="min-h-11 cursor-pointer gap-3 rounded-lg px-3 text-sm font-semibold focus:bg-[#e9f8fc]"
-                  onSelect={() => setSearchModalOpen(true)}
-                >
-                  <Search className="size-4.5 text-[#2aaed3]" /> Search
-                </DropdownMenuItem> */}
-                <DropdownMenuItem asChild>
-                  <Link
-                    to="/account/notifications"
-                    className="min-h-11 cursor-pointer gap-3 rounded-lg px-3 text-sm font-semibold focus:bg-[#e9f8fc]"
-                  >
-                    <Bell className="size-4.5 text-[#2aaed3]" /> Notifications
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link
-                    to="/account/home/get-started"
-                    className="min-h-11 cursor-pointer gap-3 rounded-lg px-3 text-sm font-semibold focus:bg-[#e9f8fc]"
-                  >
-                    <CircleHelp className="size-4.5 text-[#2aaed3]" /> Help
-                  </Link>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+
 
             <AppMenu>
               <MenuItem
