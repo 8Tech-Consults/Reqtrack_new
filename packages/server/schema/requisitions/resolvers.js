@@ -392,7 +392,7 @@ const requisitionResolvers = {
         // (Edits to an existing requisition don't re-notify.)
         if (!id && saved) {
           notifyUsersWithPermission({
-            permissionKey: 'can_approve_requisitions',
+            permissionKey: 'can_accept_requisitions',
             excludeUserId: userId,
             type: 'RequisitionSubmitted',
             title: 'New requisition awaiting approval',

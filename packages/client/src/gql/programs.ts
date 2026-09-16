@@ -139,3 +139,46 @@ export type ProgramRecord = {
   createdAt: string;
   outcomes: ProgramOutcome[];
 };
+
+export const UPLOAD_PROGRAM_BUDGET = gql`
+  mutation UploadProgramBudget($programId: ID!, $file: Upload!) {
+    uploadProgramBudget(programId: $programId, file: $file) {
+      success
+      message
+      createdBudgetLines
+      errors
+    }
+  }
+`;
+
+export type ProgramBudgetUploadResult = {
+  success: boolean;
+  message: string;
+  createdBudgetLines?: number | null;
+  errors?: string[] | null;
+};
+
+export const CREATE_PROGRAM_BUDGET_LINE = gql`
+  mutation CreateProgramBudgetLine($input: CreateProgramBudgetLineInput!) {
+    createProgramBudgetLine(input: $input) {
+      success
+      message
+      budgetLine {
+        id
+        name
+        quantity
+        frequency
+        unitPrice
+        units
+        totalAmount
+        sortOrder
+      }
+    }
+  }
+`;
+
+export type CreateProgramBudgetLineResult = {
+  success: boolean;
+  message: string;
+  budgetLine?: ProgramBudgetLine | null;
+};

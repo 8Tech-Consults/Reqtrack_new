@@ -4,7 +4,7 @@ import RecentRequisitions from '../../RecentRequisition';
 import { ChannelStats, DashboardStatusChart, DisbursementChart, Highlights } from './blocks';
 import type { RequisitionStatusChart } from './blocks';
 
-const DashboardSectionHeading = ({ id, title }: { id: string; title: string }) => (
+export const DashboardSectionHeading = ({ id, title }: { id: string; title: string }) => (
   <h2 id={id} className="text-xl font-bold tracking-[-0.025em] text-[#172550]">{title}</h2>
 );
 
@@ -22,7 +22,7 @@ const Demo1LightSidebarContent = () => {
         <DashboardSectionHeading id="overview-heading" title="Overview" />
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <ChannelStats />
-        </div>
+        </div> 
       </section>
 
       <section aria-labelledby="analytics-heading">

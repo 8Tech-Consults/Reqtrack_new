@@ -248,7 +248,7 @@ const RolesListPage = () => {
   return (
     // <div className="min-h-screen bg-gray-50">
     <>
-      <Container>
+      {/* <Container>
         <Toolbar>
           <ToolbarHeading
             title="Roles"
@@ -256,7 +256,7 @@ const RolesListPage = () => {
           />
           <ToolbarActions></ToolbarActions>
         </Toolbar>
-      </Container>
+      </Container> */}
       <Container>
         <div className="grid grid-cols-1 lg:[grid-template-columns:360px_1fr] gap-6 overflow-hidden">
           <RolesList

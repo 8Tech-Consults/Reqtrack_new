@@ -23,6 +23,7 @@ const RequisitionsListPage = () => {
   const canCreateRequisitions = !!perms['can_create_requisitions'];
   const canAcceptRequisitions = !!perms['can_accept_requisitions'];
   const canApproveRequisitions = !!perms['can_approve_requisitions'];
+  const canAddBudgetLines = !!perms['can_add_budget_lines'];
 
   const handleExportClick = () => {
     if (exportFnRef.current) {
@@ -70,6 +71,7 @@ const RequisitionsListPage = () => {
             setExportLoading(state.loading);
           }}
           canEdit={canEditRequisitions}
+          canAddBudgetLines={canAddBudgetLines}
         />
       </Container>
     </Fragment>

@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
-import { useQuery } from '@apollo/client/react';
+import { useMutation, useQuery } from '@apollo/client/react';
 import { formatMoney, RequisitionRecord } from '../blocks/RequisitionsList';
-import { GET_PROGRAMS, ProgramRecord } from '@/gql/programs';
+import { CREATE_PROGRAM_BUDGET_LINE, GET_PROGRAMS, ProgramRecord } from '@/gql/programs';
 import { URL_2 } from '@/config/urls';
 import { Upload } from 'lucide-react';
+import { toast } from 'sonner';
+import { toFriendlyErrorMessage } from '@/utils';
 
 type DraftRequisitionItem = {
   id?: string;
@@ -40,9 +42,10 @@ type Props = {
   onSave?: (values: Record<string, any>) => void;
   initialValues?: RequisitionRecord | null;
   saving?: boolean;
+  canAddBudgetLines?: boolean;
 };
 
-const RequisitionFormSheet = ({ open, onOpenChange, initialValues, onSave, saving }: Props) => {
+const RequisitionFormSheet = ({ open, onOpenChange, initialValues, onSave, saving, canAddBudgetLines }: Props) => {
   const isEdit = Boolean(initialValues?.id);
 
   const [title, setTitle] = useState('');
@@ -58,10 +61,16 @@ const RequisitionFormSheet = ({ open, onOpenChange, initialValues, onSave, savin
   const [errors, setErrors] = useState<FieldErrors>({});
   const [itemErrors, setItemErrors] = useState<Record<string, ItemFieldErrors>>({});
 
-  const { data } = useQuery<{ programs: ProgramRecord[] }>(GET_PROGRAMS, {
+  const { data, refetch: refetchPrograms } = useQuery<{ programs: ProgramRecord[] }>(GET_PROGRAMS, {
     fetchPolicy: 'network-only',
   });
   const programOptions = data?.programs || [];
+
+  const [showNewBudgetLine, setShowNewBudgetLine] = useState(false);
+  const [newBudgetLineName, setNewBudgetLineName] = useState('');
+  const [newBudgetLineUnits, setNewBudgetLineUnits] = useState('');
+  const [newBudgetLineError, setNewBudgetLineError] = useState<string | null>(null);
+  const [createBudgetLine, { loading: creatingBudgetLine }] = useMutation(CREATE_PROGRAM_BUDGET_LINE);
 
   const selectedProgram = useMemo(
     () => programOptions.find((p) => p.id === projectYearId) || null,
@@ -121,6 +130,10 @@ const RequisitionFormSheet = ({ open, onOpenChange, initialValues, onSave, savin
     setConceptNotePreview(initialValues?.conceptNoteName || null);
     setErrors({});
     setItemErrors({});
+    setShowNewBudgetLine(false);
+    setNewBudgetLineName('');
+    setNewBudgetLineUnits('');
+    setNewBudgetLineError(null);
     setItems(
       (initialValues?.items || []).map((item) => ({
         id: item.id,
@@ -156,6 +169,59 @@ const RequisitionFormSheet = ({ open, onOpenChange, initialValues, onSave, savin
     ]);
     // clear the "add at least one line" error once a line is added
     setErrors((prev) => ({ ...prev, items: undefined }));
+  };
+
+  const handleCreateBudgetLine = async () => {
+    const name = newBudgetLineName.trim();
+    const units = newBudgetLineUnits.trim();
+
+    if (!activityId) {
+      setNewBudgetLineError('Select an activity first.');
+      return;
+    }
+    if (!name || !units) {
+      setNewBudgetLineError('Name and units are required.');
+      return;
+    }
+    if (budgetLineOptions.some((option) => option.name.toLowerCase() === name.toLowerCase())) {
+      setNewBudgetLineError('A budget line with this name already exists under this activity.');
+      return;
+    }
+
+    try {
+      const { data: result } = await createBudgetLine({
+        variables: { input: { activityId, name, units } },
+      });
+      const created = result?.createProgramBudgetLine?.budgetLine;
+      if (!created) {
+        throw new Error(result?.createProgramBudgetLine?.message || 'Failed to add budget line.');
+      }
+
+      await refetchPrograms();
+
+      setItems((prev) => [
+        ...prev,
+        {
+          id: undefined,
+          budgetLineId: created.id,
+          budgetLineName: created.name,
+          description: created.name,
+          quantity: Number(created.quantity || 1),
+          frequency: Number(created.frequency || 1),
+          unitCost: Number(created.unitPrice || 0),
+          units: String(created.units ?? units),
+        },
+      ]);
+      setErrors((prev) => ({ ...prev, items: undefined }));
+
+      setNewBudgetLineName('');
+      setNewBudgetLineUnits('');
+      setNewBudgetLineError(null);
+      setShowNewBudgetLine(false);
+      toast.success('Budget line added.');
+    } catch (error) {
+      setNewBudgetLineError(toFriendlyErrorMessage(error, 'Unable to add budget line.'));
+    }
   };
 
   const updateItem = (id: string, field: keyof DraftRequisitionItem, value: string) => {
@@ -357,6 +423,70 @@ const RequisitionFormSheet = ({ open, onOpenChange, initialValues, onSave, savin
               </select>
               <button type="button" className="btn btn-light" onClick={addBudgetLine}>Add Budget Line</button>
             </div>
+
+            {canAddBudgetLines && (
+              <div className="border-t border-dashed border-slate-200 pt-3">
+                {showNewBudgetLine ? (
+                  <div className="rounded border border-slate-200 bg-slate-50 p-2 space-y-2">
+                    <p className="text-xs font-medium text-slate-700">New budget line (not pre-configured in the budget)</p>
+                    <div className="grid md:grid-cols-2 gap-2">
+                      <input
+                        className="input input-bordered w-full"
+                        value={newBudgetLineName}
+                        onChange={(e) => {
+                          setNewBudgetLineName(e.target.value);
+                          setNewBudgetLineError(null);
+                        }}
+                        placeholder="Budget line name"
+                        disabled={!activityId}
+                      />
+                      <input
+                        className="input input-bordered w-full"
+                        value={newBudgetLineUnits}
+                        onChange={(e) => {
+                          setNewBudgetLineUnits(e.target.value);
+                          setNewBudgetLineError(null);
+                        }}
+                        placeholder="Units (e.g. days, pax)"
+                        disabled={!activityId}
+                      />
+                    </div>
+                    {newBudgetLineError && <p className="text-xs text-red-600">{newBudgetLineError}</p>}
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        className="btn btn-xs btn-light"
+                        onClick={() => {
+                          setShowNewBudgetLine(false);
+                          setNewBudgetLineName('');
+                          setNewBudgetLineUnits('');
+                          setNewBudgetLineError(null);
+                        }}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-xs btn-primary"
+                        onClick={handleCreateBudgetLine}
+                        disabled={creatingBudgetLine}
+                      >
+                        {creatingBudgetLine ? 'Adding...' : 'Save Budget Line'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn btn-xs btn-light-primary"
+                    onClick={() => setShowNewBudgetLine(true)}
+                    disabled={!activityId}
+                  >
+                    + Add New Budget Line
+                  </button>
+                )}
+              </div>
+            )}
 
             {errors.items && <p className="text-xs text-red-600">{errors.items}</p>}
 

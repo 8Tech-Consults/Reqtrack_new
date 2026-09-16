@@ -91,11 +91,13 @@ const RequisitionsList = ({
   onCreateOpenChange,
   onExportReady,
   canEdit,
+  canAddBudgetLines,
 }: {
   createOpen?: boolean;
   onCreateOpenChange?: (open: boolean) => void;
   onExportReady?: (fn: () => void, state: { loading: boolean }) => void;
   canEdit?: boolean;
+  canAddBudgetLines?: boolean;
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -506,6 +508,7 @@ const RequisitionsList = ({
         onOpenChange={onCreateOpenChange || (() => {})}
         onSave={(vals) => handleSave(vals)}
         saving={saving}
+        canAddBudgetLines={canAddBudgetLines}
       />
       <RequisitionFormSheet
         open={editOpen}
@@ -513,6 +516,7 @@ const RequisitionsList = ({
         initialValues={editRow}
         onSave={(vals) => handleSave(vals, editRow?.id)}
         saving={saving}
+        canAddBudgetLines={canAddBudgetLines}
       />
       <RequisitionDetailSheet
         open={detailOpen}
