@@ -43,6 +43,7 @@ export const MODULES_CONFIG: ModuleConfig[] = [
       { id: "can_view_own_requisitions", label: "Can View Own Requisitions" },
       { id: "can_approve_requisitions", label: "Can Approve Requisitions" },
       { id: "can_accept_requisitions", label: "Can Accept Requisitions" },
+      { id: "can_add_budget_lines", label: "Can Add New Budget Lines During Requisition Entry" },
     ],
   },
   {

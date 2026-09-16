@@ -57,6 +57,63 @@ export const GET_REQUISITIONS = gql`
 }
 `;
 
+export const GET_REQUISITION = gql`
+  query Requisition($id: ID!) {
+    requisition(id: $id) {
+      id
+      requisitionNo
+      programId
+      outcomeId
+      outputId
+      activityId
+      title
+      purpose
+      conceptNotePath
+      conceptNoteName
+      status
+      rejectionReason
+      reason
+      totalRequestedAmount
+      createdAt
+      items {
+        id
+        budgetLineId
+        description
+        quantity
+        frequency
+        unitCost
+        units
+        amount
+      }
+      requestedById
+      requestedBy {
+        id
+        email
+        name
+        staffDetails {
+          signature
+        }
+      }
+      program {
+        id
+        name
+      }
+      activity {
+        id
+        name
+      }
+      outcome {
+        id
+        name
+      }
+      output {
+        id
+        name
+      }
+    }
+  }
+`;
+
 export const GET_REQUISITION_PROGRAMS = gql`
   query RequisitionPrograms {
     requisitionPrograms {

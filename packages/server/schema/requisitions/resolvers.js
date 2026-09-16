@@ -7,6 +7,7 @@ import { fetchPrograms } from '../programs/resolvers.js';
 import saveUpload from '../../helpers/saveUpload.js';
 import checkPermission from '../../helpers/checkPermission.js';
 import hasPermission from '../../helpers/hasPermission.js';
+import { notifyUser, notifyUsersWithPermission } from '../../helpers/notifications.js';
 
 const toNumber = (value, fallback = 0) => {
   const parsed = Number(value);
@@ -387,6 +388,21 @@ const requisitionResolvers = {
           [requisitionIdString]
         );
 
+        // Newly-submitted requisitions notify whoever can approve them.
+        // (Edits to an existing requisition don't re-notify.)
+        if (!id && saved) {
+          notifyUsersWithPermission({
+            permissionKey: 'can_accept_requisitions',
+            excludeUserId: userId,
+            type: 'RequisitionSubmitted',
+            title: 'New requisition awaiting approval',
+            message: `${saved.title} (${saved.requisition_no}) was submitted for approval.`,
+            entityType: 'Requisition',
+            entityId: requisitionIdString,
+            createdBy: userId,
+          });
+        }
+
         return {
           success: true,
           message: id ? 'Requisition updated successfully' : 'Requisition created successfully',
@@ -401,7 +417,7 @@ const requisitionResolvers = {
     },
     updateRequisitionStatus: async (_parent, { id, status, reason }, context) => {
       const [[current]] = await db.execute(
-        `SELECT reason FROM requisitions WHERE id = ? AND deleted = 0 LIMIT 1`,
+        `SELECT reason, requested_by, title, requisition_no FROM requisitions WHERE id = ? AND deleted = 0 LIMIT 1`,
         [id]
       );
 
@@ -435,6 +451,19 @@ const requisitionResolvers = {
 
       if (!updated) {
         throw new GraphQLError('Requisition not found.', { extensions: { code: 'NOT_FOUND' } });
+      }
+
+      // Let the requester know once a decision has been made on their request.
+      if (['Approved','Accepted', 'Rejected'].includes(status) && current.requested_by) {
+        notifyUser({
+          userId: current.requested_by,
+          type: `Requisition${status}`,
+          title: `Requisition ${status.toLowerCase()}`,
+          message: `${current.title} (${current.requisition_no}) was ${status.toLowerCase()}.`,
+          entityType: 'Requisition',
+          entityId: id,
+          createdBy: context?.req?.user?.id || null,
+        });
       }
 
       return mapRequisition(updated);

@@ -66,6 +66,28 @@ const programsTypeDefs = `#graphql
     message: String!
   }
 
+  type ProgramBudgetUploadResponse {
+    success: Boolean!
+    message: String!
+    createdBudgetLines: Int
+    errors: [String!]
+  }
+
+  type ProgramBudgetLineMutationResponse {
+    success: Boolean!
+    message: String!
+    budgetLine: ProgramBudgetLine
+  }
+
+  input CreateProgramBudgetLineInput {
+    activityId: ID!
+    name: String!
+    quantity: Float
+    frequency: Float
+    unitPrice: Float
+    units: String!
+  }
+
   input ProgramBudgetLineInput {
     id: ID
     name: String!
@@ -122,6 +144,8 @@ const programsTypeDefs = `#graphql
     createProgram(input: ProgramInput!): ProgramMutationResponse!
     saveProgramStructure(input: SaveProgramStructureInput!): ProgramStructureResponse!
     deleteProgram(id: ID!): ProgramMutationResponse!
+    uploadProgramBudget(programId: ID!, file: Upload!): ProgramBudgetUploadResponse!
+    createProgramBudgetLine(input: CreateProgramBudgetLineInput!): ProgramBudgetLineMutationResponse!
   }
 `;
 

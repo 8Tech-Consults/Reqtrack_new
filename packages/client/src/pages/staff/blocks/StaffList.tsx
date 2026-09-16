@@ -63,11 +63,11 @@ export const parseNextOfKin = (value?: string | NextOfKinInfo | null): NextOfKin
 
 export const formatDate = (value?: string | null) => {
   if (!value) return '—';
-  const date = new Date(value);
+  const timestamp = /^\d+$/.test(value) ? Number(value) : value;
+  const date = new Date(timestamp);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleDateString('en-UG', { day: '2-digit', month: 'short', year: 'numeric' });
 };
-
 const initials = (name?: string) =>
   (name || '')
     .split(' ')

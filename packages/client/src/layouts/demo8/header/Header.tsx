@@ -15,6 +15,7 @@ import { Menu as AppMenu, MenuItem, MenuToggle } from '@/components';
 import { useAuthContext } from '@/auth';
 import { useLanguage } from '@/i18n';
 import { toAbsoluteUrl } from '@/utils';
+import { useUnreadNotificationsCount } from '@/hooks/useUnreadNotificationsCount';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,8 +42,11 @@ const Header = () => {
   const itemUserRef = useRef<any>(null);
   const itemMobileUserRef = useRef<any>(null);
   const [searchModalOpen, setSearchModalOpen] = useState(false);
+  const { count: unreadNotificationsCount } = useUnreadNotificationsCount();
 
   const displayName =
+    currentUser?.fullname ||
+    [currentUser?.first_name, currentUser?.last_name].filter(Boolean).join(' ') ||
     currentUser?.name ||
     currentUser?.username ||
     'Account';
@@ -52,14 +56,19 @@ const Header = () => {
     .join('')
     .slice(0, 2)
     .toUpperCase();
-  const workspaceName = 'NAD Workspace';
+  const workspaceName = currentUser?.companyName || 'NAD Workspace';
 
   const actionClass =
     'ease-premium relative inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-white/[0.06] text-white/80 outline-none transition-[background-color,color,transform] duration-150 hover:bg-white/[0.13] hover:text-white focus-visible:ring-2 focus-visible:ring-[#72d6ee] focus-visible:ring-offset-2 focus-visible:ring-offset-[#172550] active:scale-[0.96] motion-reduce:transition-none motion-reduce:transform-none xl:size-11';
+  // Bumped from size-10 to size-11 (44px) on mobile: size-10 (40px) sits
+  // just under the ~44px touch-target minimum recommended for phones.
   const mobileActionClass =
-    'ease-premium inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-white outline-none transition-[background-color,transform] duration-150 hover:bg-white/[0.16] focus-visible:ring-2 focus-visible:ring-[#72d6ee] active:scale-[0.96] motion-reduce:transition-none motion-reduce:transform-none';
+    'ease-premium inline-flex size-11 shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-white outline-none transition-[background-color,transform] duration-150 hover:bg-white/[0.16] focus-visible:ring-2 focus-visible:ring-[#72d6ee] active:scale-[0.96] motion-reduce:transition-none motion-reduce:transform-none';
   const userButtonClass =
     'ease-premium flex size-10 items-center justify-center rounded-full border-2 border-white/20 bg-[#72d6ee] text-xs font-bold text-[#12204a] outline-none transition-[border-color,transform] duration-150 hover:border-white/70 focus-visible:ring-2 focus-visible:ring-white active:scale-[0.96] motion-reduce:transition-none motion-reduce:transform-none xl:size-11';
+  // Mobile-only variant of the avatar button, sized to match mobileActionClass.
+  const mobileUserButtonClass =
+    'ease-premium flex size-11 items-center justify-center rounded-full border-2 border-white/20 bg-[#72d6ee] text-xs font-bold text-[#12204a] outline-none transition-[border-color,transform] duration-150 hover:border-white/70 focus-visible:ring-2 focus-visible:ring-white active:scale-[0.96] motion-reduce:transition-none motion-reduce:transform-none';
 
   const dropdownPlacement = {
     placement: isRTL() ? ('bottom-start' as const) : ('bottom-end' as const),
@@ -75,7 +84,10 @@ const Header = () => {
         Skip to content
       </a>
 
-      <header className="nad-app-header sticky top-0 z-40 w-screen max-w-[100vw] shrink-0 overflow-x-clip border-b border-white/10 bg-[#172550] text-white">
+      {/* w-full instead of w-screen: w-screen is the viewport width including
+          the scrollbar gutter, which can push the header wider than the
+          document on some mobile browsers and force a sideways scroll. */}
+      <header className="nad-app-header sticky top-0 z-40 w-full max-w-[100vw] shrink-0 overflow-x-clip border-b border-white/10 bg-[#172550] text-white [padding-top:env(safe-area-inset-top)]">
         <div className="hidden h-full w-full items-stretch px-5 lg:flex xl:px-6">
           <div className="flex shrink-0 items-center gap-3">
             <Link
@@ -102,7 +114,7 @@ const Header = () => {
               <DropdownMenuContent
                 align="start"
                 sideOffset={9}
-                className="w-72 rounded-xl border-slate-200 bg-white p-2 text-[#172550] shadow-[0_18px_50px_rgba(16,35,72,0.22)]"
+                className="w-72 max-w-[calc(100vw-2rem)] rounded-xl border-slate-200 bg-white p-2 text-[#172550] shadow-[0_18px_50px_rgba(16,35,72,0.22)]"
               >
                 <DropdownMenuLabel className="px-3 pb-1 pt-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
                   Current workspace
@@ -165,16 +177,18 @@ const Header = () => {
               </AppMenu>
             </div> */}
 
-            <Link
-              to="/account/home/get-started"
-              className={actionClass + ' hidden 2xl:inline-flex'}
-              aria-label="Help"
-              title="Help"
-            >
+            {/* Was hidden until 2xl (1536px), which meant Help never showed up
+                on most laptop/desktop screens even though this whole bar only
+                renders at lg (1024px) and up. Matched to the bar's own
+                breakpoint instead. */}
+            <Link to="/account/home/get-started" className={actionClass + ' hidden lg:inline-flex'} aria-label="Help" title="Help">
               <CircleHelp className="size-5" />
             </Link>
 
-            {/* <div className="hidden xl:block">
+            {/* Was hidden until xl (1280px) — between 1024 and 1280px this
+                left notifications and apps invisible with nothing standing
+                in for them. Matched to the bar's own lg breakpoint. */}
+            <div className="hidden lg:block">
               <AppMenu>
                 <MenuItem
                   ref={itemNotificationsRef}
@@ -184,14 +198,16 @@ const Header = () => {
                 >
                   <MenuToggle className={actionClass} aria-label="Notifications">
                     <Bell className="size-5" />
-                    <span className="absolute right-2.5 top-2.5 size-1.5 rounded-full bg-[#72d6ee] ring-2 ring-[#172550]" />
+                    {unreadNotificationsCount > 0 && (
+                      <span className="absolute right-2.5 top-2.5 size-1.5 rounded-full bg-[#72d6ee] ring-2 ring-[#172550]" />
+                    )}
                   </MenuToggle>
                   {DropdownNotifications({ menuTtemRef: itemNotificationsRef })}
                 </MenuItem>
               </AppMenu>
-            </div> */}
+            </div>
 
-            <div className="hidden xl:block">
+            <div className="hidden lg:block">
               <AppMenu>
                 <MenuItem
                   ref={itemAppsRef}
@@ -225,7 +241,7 @@ const Header = () => {
           </div>
         </div>
 
-        <div className="flex h-full w-full items-center gap-3 px-4 lg:hidden">
+        <div className="flex h-full w-full items-center gap-2 px-3 sm:gap-3 sm:px-4 lg:hidden">
           <button
             type="button"
             className={mobileActionClass + ' bg-transparent'}
@@ -238,15 +254,15 @@ const Header = () => {
           <Link
             to="/dashboard"
             aria-label="NAD dashboard"
-            className="flex items-center gap-2 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-[#72d6ee]"
+            className="flex min-w-0 items-center gap-2 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-[#72d6ee]"
           >
-            <span className="flex size-10 items-center justify-center rounded-xl bg-white">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white">
               <img src={toAbsoluteUrl('/media/images/logo.png')} className="size-8" alt="" />
             </span>
-            <span className="hidden text-sm font-bold sm:block">NAD</span>
+            <span className="hidden truncate text-sm font-bold sm:block">NAD</span>
           </Link>
 
-          <div className="ml-auto flex items-center gap-1.5">
+          <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-1.5">
             <Link to="/requisitions" className={mobileActionClass} aria-label="Open requisitions">
               <Plus className="size-5" />
             </Link>
@@ -260,14 +276,14 @@ const Header = () => {
               <DropdownMenuContent
                 align="end"
                 sideOffset={9}
-                className="w-56 rounded-xl border-slate-200 bg-white p-2 text-[#172550] shadow-[0_18px_50px_rgba(16,35,72,0.22)]"
+                className="w-56 max-w-[calc(100vw-2rem)] rounded-xl border-slate-200 bg-white p-2 text-[#172550] shadow-[0_18px_50px_rgba(16,35,72,0.22)]"
               >
-                <DropdownMenuItem
+                {/* <DropdownMenuItem
                   className="min-h-11 cursor-pointer gap-3 rounded-lg px-3 text-sm font-semibold focus:bg-[#e9f8fc]"
                   onSelect={() => setSearchModalOpen(true)}
                 >
                   <Search className="size-4.5 text-[#2aaed3]" /> Search
-                </DropdownMenuItem>
+                </DropdownMenuItem> */}
                 <DropdownMenuItem asChild>
                   <Link
                     to="/account/notifications"
@@ -294,7 +310,7 @@ const Header = () => {
                 trigger="click"
                 dropdownProps={dropdownPlacement}
               >
-                <MenuToggle className={userButtonClass} aria-label={`Open account menu for ${displayName}`}>
+                <MenuToggle className={mobileUserButtonClass} aria-label={`Open account menu for ${displayName}`}>
                   {initials}
                 </MenuToggle>
                 {DropdownUser({ menuItemRef: itemMobileUserRef })}

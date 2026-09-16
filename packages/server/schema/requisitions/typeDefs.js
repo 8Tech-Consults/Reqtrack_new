@@ -87,7 +87,7 @@ const requisitionsTypeDefs = `#graphql
     activityId: ID
     title: String!
     purpose: String
-    conceptNote: Upload
+    conceptNote: Upload!
     status: String
     items: [CreateRequisitionItemInput!]!
   }

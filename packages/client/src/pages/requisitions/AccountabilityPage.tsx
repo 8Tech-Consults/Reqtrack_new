@@ -72,6 +72,7 @@ const AccountabilityPage = () => {
                 description: item.description,
                 amount: item.amount,
               }))}
+              requisitionAmountRequested={requisition.totalRequestedAmount}
               fileBaseUrl={URL_2}
             />
           )}

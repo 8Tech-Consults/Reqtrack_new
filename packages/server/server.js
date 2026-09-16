@@ -15,6 +15,7 @@ import {
   hasUsableBearerToken,
   isPublicGraphqlOperation,
 } from "./utils/graphqlPublicAccess.js";
+import rateLimit from "express-rate-limit";
 import { logError, requestLogContext } from "./utils/logger.js";
 import graphqlUploadExpress from "graphql-upload/graphqlUploadExpress.mjs";
 import {
@@ -48,6 +49,41 @@ app.use((req, res, next) => {
 app.use(express.static("public"));
 app.use(cors({ origin: "*", exposedHeaders: ["x-request-id"] }));
 app.use(express.json());
+
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  // skipSuccessfulRequests: true,
+  skip: (req) => {
+    const body = req.body ?? {};
+    const operationName = body?.operationName || req.query?.operationName;
+    const query =
+      typeof body?.query === "string"
+        ? body.query
+        : typeof req.query?.query === "string"
+          ? req.query.query
+          : "";
+    const isLoginOperation =
+      operationName === "Login" || /\blogin\s*\(/i.test(query);
+
+      console.log("[loginLimiter]", { operationName, isLoginOperation, willCount: isLoginOperation });
+
+    return !isLoginOperation;
+  },
+  handler: (_req, res) => {
+    res.status(200).json({
+      errors: [
+        {
+          message: "Too many login attempts. Please try again in 15 minutes.",
+        },
+      ],
+    });
+  },
+});
+
+
 const httpServer = http.createServer(app);
 
 const PWD_TEMPLATE_FILE = "Pwd_Profiling_EightTech.xlsx";
@@ -256,430 +292,6 @@ const buildVerificationPage = ({ isValid, message, label }) => {
 </html>`;
 };
 
-app.get("/templates/pwd-profiling-template.xlsx", async (_req, res) => {
-  try {
-    const templatePath = path.join(
-      process.cwd(),
-      "public",
-      "templates",
-      PWD_TEMPLATE_FILE
-    );
-
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.readFile(templatePath);
-
-    const worksheet = workbook.worksheets[0];
-    if (!worksheet) {
-      return res.status(500).json({ error: "Template worksheet not found" });
-    }
-
-    let districtColumn = findTemplateColumnNumber(
-      worksheet,
-      DISTRICT_TEMPLATE_HEADERS
-    );
-    let genderColumn = findTemplateColumnNumber(
-      worksheet,
-      GENDER_TEMPLATE_HEADERS
-    );
-    let phoneColumn = findTemplateColumnNumber(
-      worksheet,
-      PHONE_TEMPLATE_HEADERS
-    );
-    let alternativePhoneColumn = findTemplateColumnNumber(
-      worksheet,
-      ALT_PHONE_TEMPLATE_HEADERS
-    );
-    let idNumberColumn = findTemplateColumnNumber(
-      worksheet,
-      ID_NUMBER_TEMPLATE_HEADERS
-    );
-    let employmentColumn = findTemplateColumnNumber(
-      worksheet,
-      EMPLOYMENT_TEMPLATE_HEADERS
-    );
-    let dobColumn = findTemplateColumnNumber(worksheet, DOB_TEMPLATE_HEADERS);
-    let ageColumn = findTemplateColumnNumber(worksheet, AGE_TEMPLATE_HEADERS);
-    let disabilityColumns = findTemplateColumnNumbers(
-      worksheet,
-      (header) =>
-        DISABILITY_TEMPLATE_HEADERS.has(header) ||
-        /^disability(_\d+)?$/.test(header) ||
-        /^select_the_disability(_\d+)?$/.test(header)
-    );
-
-    const missingColumns = [];
-    if (!districtColumn) missingColumns.push("District");
-    if (!genderColumn) missingColumns.push("Gender");
-    if (!phoneColumn) missingColumns.push("Phone Number");
-    if (!disabilityColumns.length) missingColumns.push("Disabilities");
-
-    if (missingColumns.length > 0) {
-      return res
-        .status(500)
-        .json({
-          error: `Template column(s) not found: ${missingColumns.join(", ")}`,
-        });
-    }
-
-    if (!alternativePhoneColumn && phoneColumn) {
-      const insertAt = phoneColumn + 1;
-      worksheet.spliceColumns(insertAt, 0, [""]);
-      worksheet.getCell(1, insertAt).value = "Alternative Phone No";
-
-      // Re-resolve shifted columns after insertion.
-      districtColumn = findTemplateColumnNumber(
-        worksheet,
-        DISTRICT_TEMPLATE_HEADERS
-      );
-      genderColumn = findTemplateColumnNumber(
-        worksheet,
-        GENDER_TEMPLATE_HEADERS
-      );
-      phoneColumn = findTemplateColumnNumber(worksheet, PHONE_TEMPLATE_HEADERS);
-      alternativePhoneColumn = findTemplateColumnNumber(
-        worksheet,
-        ALT_PHONE_TEMPLATE_HEADERS
-      );
-      idNumberColumn = findTemplateColumnNumber(
-        worksheet,
-        ID_NUMBER_TEMPLATE_HEADERS
-      );
-      employmentColumn = findTemplateColumnNumber(
-        worksheet,
-        EMPLOYMENT_TEMPLATE_HEADERS
-      );
-      dobColumn = findTemplateColumnNumber(worksheet, DOB_TEMPLATE_HEADERS);
-      ageColumn = findTemplateColumnNumber(worksheet, AGE_TEMPLATE_HEADERS);
-      disabilityColumns = findTemplateColumnNumbers(
-        worksheet,
-        (header) =>
-          DISABILITY_TEMPLATE_HEADERS.has(header) ||
-          /^disability(_\d+)?$/.test(header) ||
-          /^select_the_disability(_\d+)?$/.test(header)
-      );
-    }
-
-    if (!idNumberColumn) {
-      const anchorColumn = alternativePhoneColumn || phoneColumn;
-      const insertAt = anchorColumn
-        ? anchorColumn + 1
-        : districtColumn || worksheet.columnCount + 1;
-      worksheet.spliceColumns(insertAt, 0, [""]);
-      worksheet.getCell(1, insertAt).value = "ID Number";
-
-      // Re-resolve shifted columns after insertion.
-      districtColumn = findTemplateColumnNumber(
-        worksheet,
-        DISTRICT_TEMPLATE_HEADERS
-      );
-      genderColumn = findTemplateColumnNumber(
-        worksheet,
-        GENDER_TEMPLATE_HEADERS
-      );
-      phoneColumn = findTemplateColumnNumber(worksheet, PHONE_TEMPLATE_HEADERS);
-      alternativePhoneColumn = findTemplateColumnNumber(
-        worksheet,
-        ALT_PHONE_TEMPLATE_HEADERS
-      );
-      idNumberColumn = findTemplateColumnNumber(
-        worksheet,
-        ID_NUMBER_TEMPLATE_HEADERS
-      );
-      employmentColumn = findTemplateColumnNumber(
-        worksheet,
-        EMPLOYMENT_TEMPLATE_HEADERS
-      );
-      dobColumn = findTemplateColumnNumber(worksheet, DOB_TEMPLATE_HEADERS);
-      ageColumn = findTemplateColumnNumber(worksheet, AGE_TEMPLATE_HEADERS);
-      disabilityColumns = findTemplateColumnNumbers(
-        worksheet,
-        (header) =>
-          DISABILITY_TEMPLATE_HEADERS.has(header) ||
-          /^disability(_\d+)?$/.test(header) ||
-          /^select_the_disability(_\d+)?$/.test(header)
-      );
-    }
-
-    if (!employmentColumn) {
-      const anchorColumn = idNumberColumn || alternativePhoneColumn || phoneColumn;
-      const insertAt = anchorColumn
-        ? anchorColumn + 1
-        : districtColumn || worksheet.columnCount + 1;
-      worksheet.spliceColumns(insertAt, 0, [""]);
-      worksheet.getCell(1, insertAt).value = "Employment";
-
-      // Re-resolve shifted columns after insertion.
-      districtColumn = findTemplateColumnNumber(
-        worksheet,
-        DISTRICT_TEMPLATE_HEADERS
-      );
-      genderColumn = findTemplateColumnNumber(
-        worksheet,
-        GENDER_TEMPLATE_HEADERS
-      );
-      phoneColumn = findTemplateColumnNumber(worksheet, PHONE_TEMPLATE_HEADERS);
-      alternativePhoneColumn = findTemplateColumnNumber(
-        worksheet,
-        ALT_PHONE_TEMPLATE_HEADERS
-      );
-      idNumberColumn = findTemplateColumnNumber(
-        worksheet,
-        ID_NUMBER_TEMPLATE_HEADERS
-      );
-      employmentColumn = findTemplateColumnNumber(
-        worksheet,
-        EMPLOYMENT_TEMPLATE_HEADERS
-      );
-      dobColumn = findTemplateColumnNumber(worksheet, DOB_TEMPLATE_HEADERS);
-      ageColumn = findTemplateColumnNumber(worksheet, AGE_TEMPLATE_HEADERS);
-      disabilityColumns = findTemplateColumnNumbers(
-        worksheet,
-        (header) =>
-          DISABILITY_TEMPLATE_HEADERS.has(header) ||
-          /^disability(_\d+)?$/.test(header) ||
-          /^select_the_disability(_\d+)?$/.test(header)
-      );
-    }
-
-    const [districtRows] = await db.execute(
-      "SELECT name FROM districts WHERE name IS NOT NULL AND TRIM(name) <> '' ORDER BY name ASC"
-    );
-    const [disabilityRows] = await db.execute(
-      "SELECT name FROM disabilities WHERE deleted = 0 AND name IS NOT NULL AND TRIM(name) <> '' ORDER BY name ASC"
-    );
-
-    const districtNames = Array.from(
-      new Set(
-        districtRows
-          .map((row) => String(row?.name ?? "").trim())
-          .filter(Boolean)
-      )
-    );
-    const disabilityNames = Array.from(
-      new Set(
-        disabilityRows
-          .map((row) => String(row?.name ?? "").trim())
-          .filter(Boolean)
-      )
-    );
-    const genderValues = ["M", "F"];
-
-    if (districtNames.length === 0) {
-      return res.status(500).json({ error: "No districts found in database" });
-    }
-    if (disabilityNames.length === 0) {
-      return res
-        .status(500)
-        .json({ error: "No disabilities found in database" });
-    }
-
-    if (disabilityColumns.length < TEMPLATE_DISABILITY_COLUMN_COUNT) {
-      const anchorColumn = disabilityColumns[0];
-      const toAdd = TEMPLATE_DISABILITY_COLUMN_COUNT - disabilityColumns.length;
-      const insertAt = anchorColumn + 1;
-      worksheet.spliceColumns(insertAt, 0, ...new Array(toAdd).fill([""]));
-
-      for (let i = 2; i <= TEMPLATE_DISABILITY_COLUMN_COUNT; i += 1) {
-        worksheet.getCell(1, anchorColumn + i - 1).value = `Disability ${i}`;
-      }
-
-      disabilityColumns = findTemplateColumnNumbers(
-        worksheet,
-        (header) =>
-          DISABILITY_TEMPLATE_HEADERS.has(header) ||
-          /^disability(_\d+)?$/.test(header) ||
-          /^select_the_disability(_\d+)?$/.test(header)
-      );
-
-      // Column insertions can shift downstream columns (including district/gender).
-      districtColumn = findTemplateColumnNumber(
-        worksheet,
-        DISTRICT_TEMPLATE_HEADERS
-      );
-      genderColumn = findTemplateColumnNumber(
-        worksheet,
-        GENDER_TEMPLATE_HEADERS
-      );
-      phoneColumn = findTemplateColumnNumber(worksheet, PHONE_TEMPLATE_HEADERS);
-      alternativePhoneColumn = findTemplateColumnNumber(
-        worksheet,
-        ALT_PHONE_TEMPLATE_HEADERS
-      );
-      idNumberColumn = findTemplateColumnNumber(
-        worksheet,
-        ID_NUMBER_TEMPLATE_HEADERS
-      );
-      employmentColumn = findTemplateColumnNumber(
-        worksheet,
-        EMPLOYMENT_TEMPLATE_HEADERS
-      );
-      dobColumn = findTemplateColumnNumber(worksheet, DOB_TEMPLATE_HEADERS);
-      ageColumn = findTemplateColumnNumber(worksheet, AGE_TEMPLATE_HEADERS);
-    }
-
-    if (!dobColumn || !ageColumn) {
-      const columnsToInsert = [];
-      if (!dobColumn) columnsToInsert.push([""]);
-      if (!ageColumn) columnsToInsert.push([""]);
-
-      const insertAt = phoneColumn
-        ? phoneColumn + 1
-        : districtColumn || worksheet.columnCount + 1;
-      worksheet.spliceColumns(insertAt, 0, ...columnsToInsert);
-
-      let cursor = insertAt;
-      if (!dobColumn) {
-        worksheet.getCell(1, cursor).value = "Date of Birth";
-        dobColumn = cursor;
-        cursor += 1;
-      }
-      if (!ageColumn) {
-        worksheet.getCell(1, cursor).value = "Age";
-        ageColumn = cursor;
-      }
-
-      // Re-resolve shifted columns after insertion.
-      districtColumn = findTemplateColumnNumber(
-        worksheet,
-        DISTRICT_TEMPLATE_HEADERS
-      );
-      genderColumn = findTemplateColumnNumber(
-        worksheet,
-        GENDER_TEMPLATE_HEADERS
-      );
-      phoneColumn = findTemplateColumnNumber(worksheet, PHONE_TEMPLATE_HEADERS);
-      alternativePhoneColumn = findTemplateColumnNumber(
-        worksheet,
-        ALT_PHONE_TEMPLATE_HEADERS
-      );
-      idNumberColumn = findTemplateColumnNumber(
-        worksheet,
-        ID_NUMBER_TEMPLATE_HEADERS
-      );
-      employmentColumn = findTemplateColumnNumber(
-        worksheet,
-        EMPLOYMENT_TEMPLATE_HEADERS
-      );
-      dobColumn = findTemplateColumnNumber(worksheet, DOB_TEMPLATE_HEADERS);
-      ageColumn = findTemplateColumnNumber(worksheet, AGE_TEMPLATE_HEADERS);
-      disabilityColumns = findTemplateColumnNumbers(
-        worksheet,
-        (header) =>
-          DISABILITY_TEMPLATE_HEADERS.has(header) ||
-          /^disability(_\d+)?$/.test(header) ||
-          /^select_the_disability(_\d+)?$/.test(header)
-      );
-    }
-
-    const existingSource = workbook.getWorksheet(PWD_TEMPLATE_SOURCE_SHEET);
-    if (existingSource) {
-      workbook.removeWorksheet(existingSource.id);
-    }
-
-    const districtSourceSheet = workbook.addWorksheet(PWD_TEMPLATE_SOURCE_SHEET);
-    districtNames.forEach((name, index) => {
-      districtSourceSheet.getCell(index + 1, 1).value = name;
-    });
-    disabilityNames.forEach((name, index) => {
-      districtSourceSheet.getCell(index + 1, 2).value = name;
-    });
-    genderValues.forEach((name, index) => {
-      districtSourceSheet.getCell(index + 1, 3).value = name;
-    });
-    districtSourceSheet.state = "veryHidden";
-
-    const districtFormula = `='${PWD_TEMPLATE_SOURCE_SHEET}'!$A$1:$A$${districtNames.length}`;
-    const disabilityFormula = `='${PWD_TEMPLATE_SOURCE_SHEET}'!$B$1:$B$${disabilityNames.length}`;
-    const genderFormula = `='${PWD_TEMPLATE_SOURCE_SHEET}'!$C$1:$C$${genderValues.length}`;
-    const validationEndRow = 5000;
-    if (phoneColumn) {
-      worksheet.getColumn(phoneColumn).numFmt = "@";
-    }
-    if (alternativePhoneColumn) {
-      worksheet.getColumn(alternativePhoneColumn).numFmt = "@";
-    }
-    if (idNumberColumn) {
-      worksheet.getColumn(idNumberColumn).numFmt = "@";
-    }
-    if (employmentColumn) {
-      worksheet.getColumn(employmentColumn).numFmt = "@";
-    }
-
-    for (let row = 2; row <= validationEndRow; row += 1) {
-      const districtCell = worksheet.getCell(row, districtColumn);
-      districtCell.dataValidation = {
-        type: "list",
-        allowBlank: false,
-        formulae: [districtFormula],
-        showErrorMessage: true,
-        errorStyle: "error",
-        errorTitle: "Invalid District",
-        error: "Please select a district from the dropdown list.",
-      };
-
-      const genderCell = worksheet.getCell(row, genderColumn);
-      genderCell.dataValidation = {
-        type: "list",
-        allowBlank: false,
-        formulae: [genderFormula],
-        showErrorMessage: true,
-        errorStyle: "error",
-        errorTitle: "Invalid Gender",
-        error: "Please select gender as M or F.",
-      };
-
-      if (dobColumn) {
-        const dobCell = worksheet.getCell(row, dobColumn);
-        dobCell.numFmt = "yyyy-mm-dd";
-        dobCell.dataValidation = {
-          type: "date",
-          allowBlank: true,
-          operator: "between",
-          formulae: ["DATE(1900,1,1)", "TODAY()"],
-          showErrorMessage: true,
-          errorStyle: "error",
-          errorTitle: "Invalid Date of Birth",
-          error: "Enter a valid date of birth in the past.",
-        };
-      }
-
-      if (ageColumn) {
-        const ageCell = worksheet.getCell(row, ageColumn);
-        ageCell.numFmt = "0";
-      }
-
-      disabilityColumns.forEach((columnNumber) => {
-        const disabilityCell = worksheet.getCell(row, columnNumber);
-        disabilityCell.dataValidation = {
-          type: "list",
-          allowBlank: true,
-          formulae: [disabilityFormula],
-          showErrorMessage: true,
-          errorStyle: "error",
-          errorTitle: "Invalid Disability",
-          error: "Please select a disability from the dropdown list.",
-        };
-      });
-    }
-
-    res.setHeader(
-      "Content-Type",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    );
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename="${PWD_TEMPLATE_FILE}"`
-    );
-
-    await workbook.xlsx.write(res);
-    res.end();
-  } catch (error) {
-    console.error("Failed to generate PWD import template:", error);
-    return res
-      .status(500)
-      .json({ error: "Failed to generate PWD import template" });
-  }
-});
 
 app.get("/verify/seed-label/:id", async (req, res) => {
   const { id } = req.params;
@@ -854,6 +466,7 @@ app.use(
   "/graphql",
   cors({ origin: "*", exposedHeaders: ["x-request-id"] }),
   express.json(),
+  loginLimiter,
   graphqlUploadExpress(),
   // expressMiddleware accepts the same arguments:
   // an Apollo Server instance and optional configuration options

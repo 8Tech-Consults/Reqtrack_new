@@ -16,6 +16,7 @@ const RequisitionsListPage = () => {
   const canEditRequisitions = Boolean(perms.can_edit_requisitions);
 
   const canCreateRequisitions = !!perms['can_create_requisitions'];
+  const canAddBudgetLines = !!perms['can_add_budget_lines'];
 
   const handleExportClick = useCallback(() => {
     if (exportFnRef.current) {
@@ -53,6 +54,7 @@ const RequisitionsListPage = () => {
             setExportLoading(state.loading);
           }}
           canEdit={canEditRequisitions}
+          canAddBudgetLines={canAddBudgetLines}
         />
       </div>
     </Container>

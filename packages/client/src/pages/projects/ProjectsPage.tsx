@@ -1,5 +1,5 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
-import { ChevronRight, MoreVertical, Pencil, Trash2 } from 'lucide-react';
+import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronRight, MoreVertical, Pencil, Trash2, Upload, X } from 'lucide-react';
 import clsx from 'clsx';
 import { useMutation, useQuery } from '@apollo/client/react';
 import { Container } from '@/components/container';
@@ -15,6 +15,14 @@ import { useAuthContext } from '@/auth/useAuthContext';
 import { getPermissionsFromToken } from '@/utils/permissions';
 import { toast } from 'sonner';
 import { useDemo8Layout } from '@/layouts/demo8';
+import { URL_2 } from '@/config/urls';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle
+} from '@/components/ui/sheet';
 import {
   CREATE_PROGRAM,
   DELETE_PROGRAM,
@@ -22,7 +30,9 @@ import {
   GET_PROGRAMS,
   ProgramManager,
   ProgramRecord,
-  SAVE_PROGRAM_STRUCTURE
+  ProgramBudgetUploadResult,
+  SAVE_PROGRAM_STRUCTURE,
+  UPLOAD_PROGRAM_BUDGET
 } from '@/gql/programs';
 
 const formatMoney = (value: number) =>
@@ -136,6 +146,13 @@ export const ProjectsPage = () => {
     refetchQueries: [{ query: GET_PROGRAMS }],
     awaitRefetchQueries: true
   });
+  const [uploadProgramBudget, { loading: uploadingBudget }] = useMutation<
+    { uploadProgramBudget: ProgramBudgetUploadResult },
+    { programId: string; file: File }
+  >(UPLOAD_PROGRAM_BUDGET, {
+    refetchQueries: [{ query: GET_PROGRAMS }],
+    awaitRefetchQueries: true
+  });
 
   const programs = data?.programs || [];
   const managers = managerData?.programManagers || [];
@@ -161,6 +178,9 @@ export const ProjectsPage = () => {
   const [selectedOutputId, setSelectedOutputId] = useState<string | null>(null);
   const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null);
   const [nodeEditor, setNodeEditor] = useState<PlanNodeEditor | null>(null);
+  const budgetFileInputRef = useRef<HTMLInputElement>(null);
+  const [budgetUploadSheetOpen, setBudgetUploadSheetOpen] = useState(false);
+  const [budgetUploadErrors, setBudgetUploadErrors] = useState<string[]>([]);
 
   // Inline "Add a brief program description..." affordance (Program header).
   // NOTE: SAVE_PROGRAM_STRUCTURE currently only persists the outcomes tree.
@@ -591,6 +611,40 @@ export const ProjectsPage = () => {
     setEditingDescription(false);
   };
 
+  const handleUploadBudgetClick = () => {
+    if (!selectedProgram) return;
+    budgetFileInputRef.current?.click();
+  };
+
+  const handleBudgetFileSelected = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] || null;
+    event.target.value = '';
+    if (!file || !selectedProgram) return;
+
+    const confirmed = window.confirm(
+      `Uploading will replace "${selectedProgram.name}"'s entire current budget with the contents of this file. Continue?`
+    );
+    if (!confirmed) return;
+
+    setBudgetUploadErrors([]);
+    try {
+      const response = await uploadProgramBudget({ variables: { programId: selectedProgram.id, file } });
+      const result = response.data?.uploadProgramBudget;
+
+      if (result?.success) {
+        setBudgetUploadSheetOpen(false);
+        toast.success(result.message);
+      } else if (result?.errors?.length) {
+        setBudgetUploadErrors(result.errors);
+        toast.error('The file has errors. Review the details and try again.');
+      } else {
+        toast.error(result?.message || 'Unable to upload this budget. Please try again.');
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to upload this budget. Please try again.');
+    }
+  };
+
   return (
     <Container>
       <div className="py-4 sm:py-5 lg:py-6">
@@ -719,6 +773,16 @@ export const ProjectsPage = () => {
                           </button>
                         )}
                       </div>
+                      {canManagePrograms && (
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-light shrink-0 gap-1.5"
+                          onClick={() => setBudgetUploadSheetOpen(true)}
+                        >
+                          <Upload size={14} />
+                          Import budget
+                        </button>
+                      )}
                     </div>
 
                     <dl className="mt-5 grid gap-3 sm:grid-cols-3">
@@ -1263,6 +1327,66 @@ export const ProjectsPage = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      <Sheet open={budgetUploadSheetOpen} onOpenChange={setBudgetUploadSheetOpen}>
+        <SheetContent side="right" className="flex h-full w-full flex-col p-0 sm:max-w-[620px]">
+          <div className="border-b bg-slate-50/50 p-6">
+            <SheetHeader>
+              <SheetTitle>Import budget</SheetTitle>
+              <SheetDescription>
+                {selectedProgram ? `Upload an Excel budget for “${selectedProgram.name}”.` : 'Select a program first.'}
+              </SheetDescription>
+            </SheetHeader>
+          </div>
+
+          <div className="flex-1 space-y-4 overflow-y-auto p-6">
+            <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-sm font-semibold text-slate-900">1. Download the template</p>
+              <p className="text-xs text-slate-500">Add the outcomes, outputs, activities, and budget items for this program.</p>
+              <a href={`${URL_2}/templates/budget-upload-template.xlsx`} className="btn btn-sm btn-light w-fit" download>
+                Download template
+              </a>
+            </div>
+
+            <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-sm font-semibold text-slate-900">2. Upload the completed file</p>
+              <p className="text-xs text-amber-700">This replaces the program's current budget after you confirm.</p>
+              <button
+                type="button"
+                className="btn btn-sm btn-primary w-fit gap-1.5"
+                onClick={handleUploadBudgetClick}
+                disabled={uploadingBudget || !selectedProgram}
+              >
+                <Upload size={14} />
+                {uploadingBudget ? 'Uploading…' : 'Choose Excel file'}
+              </button>
+              <input ref={budgetFileInputRef} type="file" accept=".xlsx" className="hidden" onChange={handleBudgetFileSelected} />
+            </div>
+
+            {!!budgetUploadErrors.length && (
+              <div className="rounded-xl border border-rose-200 bg-rose-50 p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm font-semibold text-rose-700">
+                    Fix {budgetUploadErrors.length === 1 ? 'this error' : `these ${budgetUploadErrors.length} errors`} before uploading again:
+                  </p>
+                  <button type="button" className="btn btn-icon btn-xs btn-clear shrink-0 text-rose-500" onClick={() => setBudgetUploadErrors([])} aria-label="Dismiss errors">
+                    <X size={14} />
+                  </button>
+                </div>
+                <ul className="mt-2 max-h-60 list-inside list-disc space-y-1 overflow-y-auto">
+                  {budgetUploadErrors.map((message, index) => (
+                    <li key={`${index}-${message}`} className="text-xs text-rose-600">{message}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-end border-t p-6">
+            <button type="button" className="btn btn-light" onClick={() => setBudgetUploadSheetOpen(false)}>Close</button>
+          </div>
+        </SheetContent>
+      </Sheet>
     </Container>
   );
 };
