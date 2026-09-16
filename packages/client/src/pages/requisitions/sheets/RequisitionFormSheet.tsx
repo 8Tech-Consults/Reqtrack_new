@@ -2,7 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { useMutation, useQuery } from '@apollo/client/react';
 import { formatMoney, RequisitionRecord } from '../blocks/RequisitionsList';
-import { CREATE_PROGRAM_BUDGET_LINE, GET_PROGRAMS, ProgramRecord } from '@/gql/programs';
+import {
+  CREATE_PROGRAM_BUDGET_LINE,
+  CreateProgramBudgetLineResult,
+  GET_PROGRAMS,
+  ProgramRecord,
+} from '@/gql/programs';
 import { URL_2 } from '@/config/urls';
 import { Upload } from 'lucide-react';
 import { toast } from 'sonner';
@@ -70,7 +75,10 @@ const RequisitionFormSheet = ({ open, onOpenChange, initialValues, onSave, savin
   const [newBudgetLineName, setNewBudgetLineName] = useState('');
   const [newBudgetLineUnits, setNewBudgetLineUnits] = useState('');
   const [newBudgetLineError, setNewBudgetLineError] = useState<string | null>(null);
-  const [createBudgetLine, { loading: creatingBudgetLine }] = useMutation(CREATE_PROGRAM_BUDGET_LINE);
+  const [createBudgetLine, { loading: creatingBudgetLine }] = useMutation<
+    { createProgramBudgetLine: CreateProgramBudgetLineResult },
+    { input: { activityId: string; name: string; units: string } }
+  >(CREATE_PROGRAM_BUDGET_LINE);
 
   const selectedProgram = useMemo(
     () => programOptions.find((p) => p.id === projectYearId) || null,
