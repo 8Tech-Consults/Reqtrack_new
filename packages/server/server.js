@@ -17,6 +17,11 @@ import {
 } from "./utils/graphqlPublicAccess.js";
 import rateLimit from "express-rate-limit";
 import { logError, requestLogContext } from "./utils/logger.js";
+import {
+  captureLoginResult,
+  isLoginOperation,
+  loginRateLimitKey,
+} from "./utils/loginRateLimit.js";
 import graphqlUploadExpress from "graphql-upload/graphqlUploadExpress.mjs";
 import {
   chat as aiChat,
@@ -55,23 +60,11 @@ const loginLimiter = rateLimit({
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
-  // skipSuccessfulRequests: true,
-  skip: (req) => {
-    const body = req.body ?? {};
-    const operationName = body?.operationName || req.query?.operationName;
-    const query =
-      typeof body?.query === "string"
-        ? body.query
-        : typeof req.query?.query === "string"
-          ? req.query.query
-          : "";
-    const isLoginOperation =
-      operationName === "Login" || /\blogin\s*\(/i.test(query);
-
-      console.log("[loginLimiter]", { operationName, isLoginOperation, willCount: isLoginOperation });
-
-    return !isLoginOperation;
-  },
+  keyGenerator: loginRateLimitKey,
+  skip: (req) => !isLoginOperation(req),
+  skipSuccessfulRequests: true,
+  requestWasSuccessful: (_req, res) =>
+    res.locals.loginWasSuccessful === true,
   handler: (_req, res) => {
     res.status(200).json({
       errors: [
@@ -466,6 +459,7 @@ app.use(
   "/graphql",
   cors({ origin: "*", exposedHeaders: ["x-request-id"] }),
   express.json(),
+  captureLoginResult,
   loginLimiter,
   graphqlUploadExpress(),
   // expressMiddleware accepts the same arguments:
