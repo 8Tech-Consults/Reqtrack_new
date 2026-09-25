@@ -130,6 +130,7 @@
         "dotenv": "^17.4.2",
         "exceljs": "^4.4.0",
         "express": "^5.1.0",
+        "express-rate-limit": "^8.7.0",
         "graphql": "^16.11.0",
         "graphql-scalars": "^1.24.2",
         "graphql-tools": "^9.0.20",
