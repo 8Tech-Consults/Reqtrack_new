@@ -58,9 +58,10 @@ type BudgetLineDraft = {
 };
 
 type PlanNodeEditor = {
+  mode: 'create' | 'edit';
   kind: 'outcome' | 'output' | 'activity';
   name: string;
-  outcomeId: string;
+  outcomeId?: string;
   outputId?: string;
   activityId?: string;
 };
@@ -241,12 +242,12 @@ export const ProjectsPage = () => {
     setStructureDirty(true);
   };
 
-  const addOutcome = () => {
+  const addOutcome = (name: string) => {
     if (!selectedProgram) return;
     updateDraft((program) => {
       program.outcomes.push({
         id: makeId('outcome'),
-        name: `Outcome ${program.outcomes.length + 1}`,
+        name,
         sortOrder: program.outcomes.length,
         outputs: []
       });
@@ -254,13 +255,13 @@ export const ProjectsPage = () => {
     });
   };
 
-  const addOutput = (outcomeId: string) => {
+  const addOutput = (outcomeId: string, name: string) => {
     updateDraft((program) => {
       const outcome = program.outcomes.find((item) => item.id === outcomeId);
       if (!outcome) return program;
       outcome.outputs.push({
         id: makeId('output'),
-        name: `Output ${outcome.outputs.length + 1}`,
+        name,
         sortOrder: outcome.outputs.length,
         activities: []
       });
@@ -268,13 +269,13 @@ export const ProjectsPage = () => {
     });
   };
 
-  const addActivity = (outcomeId: string, outputId: string) => {
+  const addActivity = (outcomeId: string, outputId: string, name: string) => {
     updateDraft((program) => {
       const activityParent = program.outcomes.find((item) => item.id === outcomeId)?.outputs.find((item) => item.id === outputId);
       if (!activityParent) return program;
       activityParent.activities.push({
         id: makeId('activity'),
-        name: `Activity ${activityParent.activities.length + 1}`,
+        name,
         sortOrder: activityParent.activities.length,
         budgetLines: []
       });
@@ -325,14 +326,37 @@ export const ProjectsPage = () => {
   };
 
   const handleSaveNodeName = () => {
-    if (!nodeEditor?.name.trim()) return;
+    const name = nodeEditor?.name.trim();
+    if (!nodeEditor || !name) return;
 
-    if (nodeEditor.kind === 'outcome') {
-      renameOutcome(nodeEditor.outcomeId, nodeEditor.name.trim());
-    } else if (nodeEditor.kind === 'output' && nodeEditor.outputId) {
-      renameOutput(nodeEditor.outcomeId, nodeEditor.outputId, nodeEditor.name.trim());
+    if (nodeEditor.mode === 'create') {
+      if (nodeEditor.kind === 'outcome') {
+        addOutcome(name);
+      } else if (nodeEditor.kind === 'output' && nodeEditor.outcomeId) {
+        addOutput(nodeEditor.outcomeId, name);
+      } else if (
+        nodeEditor.kind === 'activity' &&
+        nodeEditor.outcomeId &&
+        nodeEditor.outputId
+      ) {
+        addActivity(nodeEditor.outcomeId, nodeEditor.outputId, name);
+      }
+
+      setNodeEditor(null);
+      return;
+    }
+
+    if (nodeEditor.kind === 'outcome' && nodeEditor.outcomeId) {
+      renameOutcome(nodeEditor.outcomeId, name);
+    } else if (
+      nodeEditor.kind === 'output' &&
+      nodeEditor.outcomeId &&
+      nodeEditor.outputId
+    ) {
+      renameOutput(nodeEditor.outcomeId, nodeEditor.outputId, name);
     } else if (
       nodeEditor.kind === 'activity' &&
+      nodeEditor.outcomeId &&
       nodeEditor.outputId &&
       nodeEditor.activityId
     ) {
@@ -340,7 +364,7 @@ export const ProjectsPage = () => {
         nodeEditor.outcomeId,
         nodeEditor.outputId,
         nodeEditor.activityId,
-        nodeEditor.name.trim()
+        name
       );
     }
 
@@ -880,10 +904,15 @@ export const ProjectsPage = () => {
                           className="btn btn-primary"
                           disabled={selectedProgram.type === 'Admin' && (!adminOutcome || !adminOutput)}
                           onClick={() => {
-                            if (selectedOutput && selectedOutcome) addActivity(selectedOutcome.id, selectedOutput.id);
-                            else if (selectedOutcome) addOutput(selectedOutcome.id);
-                            else if (selectedProgram.type === 'Admin' && adminOutcome && adminOutput) addActivity(adminOutcome.id, adminOutput.id);
-                            else addOutcome();
+                            if (selectedOutput && selectedOutcome) {
+                              setNodeEditor({ mode: 'create', kind: 'activity', name: '', outcomeId: selectedOutcome.id, outputId: selectedOutput.id });
+                            } else if (selectedOutcome) {
+                              setNodeEditor({ mode: 'create', kind: 'output', name: '', outcomeId: selectedOutcome.id });
+                            } else if (selectedProgram.type === 'Admin' && adminOutcome && adminOutput) {
+                              setNodeEditor({ mode: 'create', kind: 'activity', name: '', outcomeId: adminOutcome.id, outputId: adminOutput.id });
+                            } else {
+                              setNodeEditor({ mode: 'create', kind: 'outcome', name: '' });
+                            }
                           }}
                         >
                           {selectedOutput
@@ -979,7 +1008,7 @@ export const ProjectsPage = () => {
                             </button>
                             {canManagePrograms && (
                               <RowActionsMenu
-                                onEdit={() => setNodeEditor({ kind: 'activity', name: activity.name, outcomeId: selectedOutcome.id, outputId: selectedOutput.id, activityId: activity.id })}
+                                onEdit={() => setNodeEditor({ mode: 'edit', kind: 'activity', name: activity.name, outcomeId: selectedOutcome.id, outputId: selectedOutput.id, activityId: activity.id })}
                                 onRemove={() => removeActivity(selectedOutcome.id, selectedOutput.id, activity.id)}
                               />
                             )}
@@ -1000,7 +1029,7 @@ export const ProjectsPage = () => {
                             </button>
                             {canManagePrograms && (
                               <RowActionsMenu
-                                onEdit={() => setNodeEditor({ kind: 'output', name: output.name, outcomeId: selectedOutcome.id, outputId: output.id })}
+                                onEdit={() => setNodeEditor({ mode: 'edit', kind: 'output', name: output.name, outcomeId: selectedOutcome.id, outputId: output.id })}
                                 onRemove={() => removeOutput(selectedOutcome.id, output.id)}
                               />
                             )}
@@ -1021,7 +1050,7 @@ export const ProjectsPage = () => {
                             </button>
                             {canManagePrograms && (
                               <RowActionsMenu
-                                onEdit={() => setNodeEditor({ kind: 'activity', name: activity.name, outcomeId: adminOutcome.id, outputId: adminOutput.id, activityId: activity.id })}
+                                onEdit={() => setNodeEditor({ mode: 'edit', kind: 'activity', name: activity.name, outcomeId: adminOutcome.id, outputId: adminOutput.id, activityId: activity.id })}
                                 onRemove={() => removeActivity(adminOutcome.id, adminOutput.id, activity.id)}
                               />
                             )}
@@ -1044,7 +1073,7 @@ export const ProjectsPage = () => {
                               </button>
                               {canManagePrograms && (
                                 <RowActionsMenu
-                                  onEdit={() => setNodeEditor({ kind: 'outcome', name: outcome.name, outcomeId: outcome.id })}
+                                  onEdit={() => setNodeEditor({ mode: 'edit', kind: 'outcome', name: outcome.name, outcomeId: outcome.id })}
                                   onRemove={() => removeOutcome(outcome.id)}
                                 />
                               )}
@@ -1091,50 +1120,61 @@ export const ProjectsPage = () => {
         }}
       >
         <DialogContent className="max-w-md p-0">
-          <DialogHeader className="border-b border-slate-100 px-5 py-4">
-            <DialogTitle className="text-base font-semibold capitalize text-slate-900">
-              Edit {nodeEditor?.kind}
-            </DialogTitle>
-            <DialogDescription>
-              Use a short, clear name that team members will recognize.
-            </DialogDescription>
-          </DialogHeader>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              handleSaveNodeName();
+            }}
+          >
+            <DialogHeader className="block border-b border-slate-100 py-4 pl-5 pr-14">
+              <DialogTitle className="text-base font-semibold capitalize text-slate-900">
+                {nodeEditor?.mode === 'create' ? 'Add' : 'Edit'} {nodeEditor?.kind}
+              </DialogTitle>
+              <DialogDescription className="mt-1 max-w-sm leading-5">
+                {nodeEditor?.mode === 'create'
+                  ? `Name this ${nodeEditor.kind} before adding it.`
+                  : 'Use a short, clear name that team members will recognize.'}
+              </DialogDescription>
+            </DialogHeader>
 
-          <div className="space-y-4 p-5">
-            <div>
-              <label className="form-label capitalize text-slate-900">
-                {nodeEditor?.kind} name
-              </label>
-              <input
-                autoFocus
-                className="input"
-                value={nodeEditor?.name || ''}
-                onChange={(event) =>
-                  setNodeEditor((current) =>
-                    current ? { ...current, name: event.target.value } : current
-                  )
-                }
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') handleSaveNodeName();
-                  if (event.key === 'Escape') setNodeEditor(null);
-                }}
-              />
-            </div>
+            <div className="space-y-4 p-5">
+              <div>
+                <label className="form-label capitalize text-slate-900" htmlFor="plan-node-name">
+                  {nodeEditor?.kind} name
+                </label>
+                <input
+                  id="plan-node-name"
+                  autoFocus
+                  required
+                  maxLength={160}
+                  className="input"
+                  value={nodeEditor?.name || ''}
+                  placeholder={`Enter ${nodeEditor?.kind || 'item'} name`}
+                  onChange={(event) =>
+                    setNodeEditor((current) =>
+                      current ? { ...current, name: event.target.value } : current
+                    )
+                  }
+                  onKeyDown={(event) => {
+                    if (event.key === 'Escape') setNodeEditor(null);
+                  }}
+                />
+              </div>
 
-            <div className="flex justify-end gap-2">
-              <button type="button" className="btn btn-light" onClick={() => setNodeEditor(null)}>
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                disabled={!nodeEditor?.name.trim()}
-                onClick={handleSaveNodeName}
-              >
-                Save changes
-              </button>
+              <div className="flex justify-end gap-2">
+                <button type="button" className="btn btn-light" onClick={() => setNodeEditor(null)}>
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary capitalize"
+                  disabled={!nodeEditor?.name.trim()}
+                >
+                  {nodeEditor?.mode === 'create' ? `Add ${nodeEditor.kind}` : 'Save changes'}
+                </button>
+              </div>
             </div>
-          </div>
+          </form>
         </DialogContent>
       </Dialog>
 
