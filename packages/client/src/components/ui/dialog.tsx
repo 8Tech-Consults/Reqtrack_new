@@ -52,7 +52,7 @@ const DialogContent = React.forwardRef<
 DialogContent.displayName = DialogPrimitive.Content.displayName;
 
 const DialogHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
-  <div className={cn('modal-header py-4', className)} {...props} />
+  <div className={cn('modal-header py-4 pe-14', className)} {...props} />
 );
 DialogHeader.displayName = 'DialogHeader';
 
@@ -83,7 +83,7 @@ const DialogDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Description
     ref={ref}
-    className={cn('text-sm text-muted-foreground', className)}
+    className={cn('min-w-0 text-sm leading-5 text-muted-foreground', className)}
     {...props}
   />
 ));

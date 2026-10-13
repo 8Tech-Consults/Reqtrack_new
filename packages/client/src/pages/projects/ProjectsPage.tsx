@@ -1,21 +1,9 @@
-import {
-  ChangeEvent,
-  Dispatch,
-  FormEvent,
-  SetStateAction,
-  memo,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState
-} from 'react';
-import { ChevronDown, ChevronRight, MoreVertical, Pencil, Trash2, ArrowRight, ChevronsRight, Upload, X } from 'lucide-react';
-import { useSearchParams } from 'react-router-dom';
+import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronRight, MoreVertical, Pencil, Trash2, Upload, X } from 'lucide-react';
+import clsx from 'clsx';
 import { useMutation, useQuery } from '@apollo/client/react';
 import { Container } from '@/components/container';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   DropdownMenu,
@@ -26,6 +14,7 @@ import {
 import { useAuthContext } from '@/auth/useAuthContext';
 import { getPermissionsFromToken } from '@/utils/permissions';
 import { toast } from 'sonner';
+import { useDemo8Layout } from '@/layouts/demo8';
 import { URL_2 } from '@/config/urls';
 import {
   Sheet,
@@ -45,12 +34,6 @@ import {
   SAVE_PROGRAM_STRUCTURE,
   UPLOAD_PROGRAM_BUDGET
 } from '@/gql/programs';
-import { DashboardSectionHeading } from '../dashboards';
-
-type Outcome = ProgramRecord['outcomes'][number];
-type Output = Outcome['outputs'][number];
-type Activity = Output['activities'][number];
-type BudgetLine = Activity['budgetLines'][number];
 
 const formatMoney = (value: number) =>
   new Intl.NumberFormat('en-UG', {
@@ -60,10 +43,7 @@ const formatMoney = (value: number) =>
   }).format(value || 0);
 
 const makeId = (prefix: string) => `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
-
-const activityTotal = (activity: Activity) => activity.budgetLines.reduce((sum, line) => sum + Number(line.totalAmount || 0), 0);
-const outputTotal = (output: Output) => output.activities.reduce((sum, activity) => sum + activityTotal(activity), 0);
-const outcomeTotal = (outcome: Outcome) => outcome.outputs.reduce((sum, output) => sum + outputTotal(output), 0);
+const cloneProgram = (program: ProgramRecord): ProgramRecord => structuredClone(program);
 
 type BudgetLineDraft = {
   outcomeId: string;
@@ -77,44 +57,26 @@ type BudgetLineDraft = {
   units: string;
 };
 
+type PlanNodeEditor = {
+  mode: 'create' | 'edit';
+  kind: 'outcome' | 'output' | 'activity';
+  name: string;
+  outcomeId?: string;
+  outputId?: string;
+  activityId?: string;
+};
+
 const calculateBudgetLineTotal = (draft: Pick<BudgetLineDraft, 'quantity' | 'frequency' | 'unitPrice'>) => {
   const quantity = Number(draft.quantity || 0);
   const frequency = Number(draft.frequency || 0);
   const unitPrice = Number(draft.unitPrice || 0);
-  return quantity * frequency * unitPrice;
+  return quantity * frequency * unitPrice ;
 };
 
-// --- Immutable, path-scoped update helpers ---------------------------------
-// Only the nodes on the path to the edited item get a new reference; every
-// sibling subtree keeps its old reference. That's what lets the memoized row
-// components below skip re-rendering rows the user isn't touching, and it
-// means a keystroke no longer deep-clones the whole program tree.
-const replaceOutcome = (program: ProgramRecord, outcomeId: string, fn: (o: Outcome) => Outcome): ProgramRecord => ({
-  ...program,
-  outcomes: program.outcomes.map((o) => (o.id === outcomeId ? fn(o) : o))
-});
-
-const replaceOutput = (outcome: Outcome, outputId: string, fn: (o: Output) => Output): Outcome => ({
-  ...outcome,
-  outputs: outcome.outputs.map((o) => (o.id === outputId ? fn(o) : o))
-});
-
-const replaceActivity = (output: Output, activityId: string, fn: (a: Activity) => Activity): Output => ({
-  ...output,
-  activities: output.activities.map((a) => (a.id === activityId ? fn(a) : a))
-});
-
-const updateActivityInProgram = (
-  program: ProgramRecord,
-  outcomeId: string,
-  outputId: string,
-  activityId: string,
-  fn: (a: Activity) => Activity
-): ProgramRecord =>
-  replaceOutcome(program, outcomeId, (outcome) => replaceOutput(outcome, outputId, (output) => replaceActivity(output, activityId, fn)));
-
 // Row-action kebab menu used at every hierarchy level below "Outcome".
-const RowActionsMenu = memo(function RowActionsMenu({
+// Keeping this as one shared component keeps the Edit/Remove affordance
+// visually identical across Output / Activity / Budget Line rows.
+const RowActionsMenu = ({
   onEdit,
   onRemove,
   editLabel = 'Edit',
@@ -124,287 +86,33 @@ const RowActionsMenu = memo(function RowActionsMenu({
   onRemove: () => void;
   editLabel?: string;
   removeLabel?: string;
-}) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button type="button" className="btn btn-icon btn-sm btn-light shrink-0" aria-label="Row actions">
-          <MoreVertical size={16} />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-36">
-        {onEdit && (
-          <DropdownMenuItem onClick={onEdit} className="gap-2 text-slate-700">
-            <Pencil size={14} /> {editLabel}
-          </DropdownMenuItem>
-        )}
-        <DropdownMenuItem onClick={onRemove} className="gap-2 text-rose-600 focus:text-rose-600">
-          <Trash2 size={14} /> {removeLabel}
+}) => (
+  <DropdownMenu>
+    <DropdownMenuTrigger asChild>
+      <button
+        type="button"
+        className="btn btn-icon btn-sm btn-light shrink-0"
+        aria-label="Row actions"
+      >
+        <MoreVertical size={16} />
+      </button>
+    </DropdownMenuTrigger>
+    <DropdownMenuContent align="end" className="w-36">
+      {onEdit && (
+        <DropdownMenuItem onClick={onEdit} className="gap-2 text-slate-700">
+          <Pencil size={14} /> {editLabel}
         </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-});
-
-const BudgetLineRow = memo(function BudgetLineRow({
-  budgetLine,
-  onEdit,
-  onRemove
-}: {
-  budgetLine: BudgetLine;
-  onEdit: (budgetLine: BudgetLine) => void;
-  onRemove: (budgetLineId: string) => void;
-}) {
-  return (
-    <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-2">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-start gap-2 min-w-0">
-          <span className="flex items-center text-emerald-500 shrink-0 mt-0.5">
-            <ChevronsRight size={14} />
-            <ChevronsRight size={14} className="-ml-2" />
-          </span>
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-slate-900 truncate">{budgetLine.name}</p>
-            <p className="text-xs text-slate-500">
-              {budgetLine.quantity} x {budgetLine.frequency} x {formatMoney(budgetLine.unitPrice)} = {formatMoney(budgetLine.totalAmount)}{' '}
-              {budgetLine.units}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <span className="text-sm font-semibold text-slate-900">{formatMoney(budgetLine.totalAmount)}</span>
-          <RowActionsMenu editLabel="Edit" onEdit={() => onEdit(budgetLine)} onRemove={() => onRemove(budgetLine.id)} />
-        </div>
-      </div>
-    </div>
-  );
-});
-
-// Shared by both the Activity-type hierarchy and the Admin-type "activities
-// only" view, eliminating the ~90-line duplicated block that used to live
-// in both branches of the JSX.
-const ActivityCard = memo(function ActivityCard({
-  outcomeId,
-  outputId,
-  activity,
-  collapsed,
-  onToggle,
-  onRename,
-  onRemove,
-  onOpenBudgetLine,
-  onRemoveBudgetLine
-}: {
-  outcomeId: string;
-  outputId: string;
-  activity: Activity;
-  collapsed: boolean;
-  onToggle: (activityId: string) => void;
-  onRename: (outcomeId: string, outputId: string, activityId: string, name: string) => void;
-  onRemove: (outcomeId: string, outputId: string, activityId: string) => void;
-  onOpenBudgetLine: (outcomeId: string, outputId: string, activityId: string, budgetLine?: BudgetLine) => void;
-  onRemoveBudgetLine: (outcomeId: string, outputId: string, activityId: string, budgetLineId: string) => void;
-}) {
-  const handleEditLine = useCallback(
-    (budgetLine: BudgetLine) => onOpenBudgetLine(outcomeId, outputId, activity.id, budgetLine),
-    [onOpenBudgetLine, outcomeId, outputId, activity.id]
-  );
-  const handleRemoveLine = useCallback(
-    (budgetLineId: string) => onRemoveBudgetLine(outcomeId, outputId, activity.id, budgetLineId),
-    [onRemoveBudgetLine, outcomeId, outputId, activity.id]
-  );
-
-  return (
-    <div className="rounded-lg border border-purple-200 bg-purple-50/40 p-2">
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          className="btn btn-icon btn-sm btn-light shrink-0"
-          onClick={() => onToggle(activity.id)}
-          aria-label={collapsed ? 'Expand activity' : 'Collapse activity'}
-        >
-          {collapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
-        </button>
-        <span className="flex items-center text-purple-500 shrink-0">
-          <ChevronsRight size={14} />
-        </span>
-        <input
-          className="input flex-1 min-w-[160px]"
-          value={activity.name}
-          onChange={(event) => onRename(outcomeId, outputId, activity.id, event.target.value)}
-        />
-        <input className="input w-40 shrink-0" value={formatMoney(activityTotal(activity))} readOnly title="Total budget for this activity" />
-        <RowActionsMenu onRemove={() => onRemove(outcomeId, outputId, activity.id)} />
-      </div>
-
-      {!collapsed && (
-        <div className="mt-2 space-y-2 pl-2 border-l-2 border-purple-200">
-          {activity.budgetLines.map((budgetLine) => (
-            <BudgetLineRow key={budgetLine.id} budgetLine={budgetLine} onEdit={handleEditLine} onRemove={handleRemoveLine} />
-          ))}
-          <button type="button" className="btn btn-sm btn-light" onClick={() => onOpenBudgetLine(outcomeId, outputId, activity.id)}>
-            Add Budget Line
-          </button>
-        </div>
       )}
-    </div>
-  );
-});
-
-const OutputCard = memo(function OutputCard({
-  outcomeId,
-  output,
-  collapsed,
-  collapsedActivities,
-  onToggle,
-  onToggleActivity,
-  onRename,
-  onRemove,
-  onRenameActivity,
-  onRemoveActivity,
-  onAddActivity,
-  onOpenBudgetLine,
-  onRemoveBudgetLine
-}: {
-  outcomeId: string;
-  output: Output;
-  collapsed: boolean;
-  collapsedActivities: Set<string>;
-  onToggle: (outputId: string) => void;
-  onToggleActivity: (activityId: string) => void;
-  onRename: (outcomeId: string, outputId: string, name: string) => void;
-  onRemove: (outcomeId: string, outputId: string) => void;
-  onRenameActivity: (outcomeId: string, outputId: string, activityId: string, name: string) => void;
-  onRemoveActivity: (outcomeId: string, outputId: string, activityId: string) => void;
-  onAddActivity: (outcomeId: string, outputId: string) => void;
-  onOpenBudgetLine: (outcomeId: string, outputId: string, activityId: string, budgetLine?: BudgetLine) => void;
-  onRemoveBudgetLine: (outcomeId: string, outputId: string, activityId: string, budgetLineId: string) => void;
-}) {
-  return (
-    <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-2">
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          className="btn btn-icon btn-sm btn-light shrink-0"
-          onClick={() => onToggle(output.id)}
-          aria-label={collapsed ? 'Expand output' : 'Collapse output'}
-        >
-          {collapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
-        </button>
-        <ArrowRight size={14} className="text-blue-500 shrink-0" />
-        <input className="input flex-1 min-w-[160px]" value={output.name} onChange={(event) => onRename(outcomeId, output.id, event.target.value)} />
-        <input className="input w-40 shrink-0" value={formatMoney(outputTotal(output))} readOnly title="Total budget for this output" />
-        <RowActionsMenu onRemove={() => onRemove(outcomeId, output.id)} />
-      </div>
-
-      {!collapsed && (
-        <div className="mt-2 space-y-2 pl-2 border-l-2 border-blue-200">
-          {output.activities.map((activity) => (
-            <ActivityCard
-              key={activity.id}
-              outcomeId={outcomeId}
-              outputId={output.id}
-              activity={activity}
-              collapsed={collapsedActivities.has(activity.id)}
-              onToggle={onToggleActivity}
-              onRename={onRenameActivity}
-              onRemove={onRemoveActivity}
-              onOpenBudgetLine={onOpenBudgetLine}
-              onRemoveBudgetLine={onRemoveBudgetLine}
-            />
-          ))}
-          <button type="button" className="btn btn-sm btn-light" onClick={() => onAddActivity(outcomeId, output.id)}>
-            Add Activity
-          </button>
-        </div>
-      )}
-    </div>
-  );
-});
-
-const OutcomeCard = memo(function OutcomeCard({
-  outcome,
-  collapsed,
-  collapsedOutputs,
-  collapsedActivities,
-  onToggle,
-  onToggleOutput,
-  onToggleActivity,
-  onRename,
-  onRemove,
-  onRenameOutput,
-  onRemoveOutput,
-  onAddOutput,
-  onRenameActivity,
-  onRemoveActivity,
-  onAddActivity,
-  onOpenBudgetLine,
-  onRemoveBudgetLine
-}: {
-  outcome: Outcome;
-  collapsed: boolean;
-  collapsedOutputs: Set<string>;
-  collapsedActivities: Set<string>;
-  onToggle: (outcomeId: string) => void;
-  onToggleOutput: (outputId: string) => void;
-  onToggleActivity: (activityId: string) => void;
-  onRename: (outcomeId: string, name: string) => void;
-  onRemove: (outcomeId: string) => void;
-  onRenameOutput: (outcomeId: string, outputId: string, name: string) => void;
-  onRemoveOutput: (outcomeId: string, outputId: string) => void;
-  onAddOutput: (outcomeId: string) => void;
-  onRenameActivity: (outcomeId: string, outputId: string, activityId: string, name: string) => void;
-  onRemoveActivity: (outcomeId: string, outputId: string, activityId: string) => void;
-  onAddActivity: (outcomeId: string, outputId: string) => void;
-  onOpenBudgetLine: (outcomeId: string, outputId: string, activityId: string, budgetLine?: BudgetLine) => void;
-  onRemoveBudgetLine: (outcomeId: string, outputId: string, activityId: string, budgetLineId: string) => void;
-}) {
-  return (
-    <div className="rounded-lg border border-slate-200 bg-white p-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          className="btn btn-icon btn-sm btn-light shrink-0"
-          onClick={() => onToggle(outcome.id)}
-          aria-label={collapsed ? 'Expand outcome' : 'Collapse outcome'}
-        >
-          {collapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
-        </button>
-        <input className="input flex-1 min-w-[160px] font-medium" value={outcome.name} onChange={(event) => onRename(outcome.id, event.target.value)} />
-        <input className="input w-40 shrink-0" value={formatMoney(outcomeTotal(outcome))} readOnly title="Total budget for this outcome" />
-        <RowActionsMenu onRemove={() => onRemove(outcome.id)} />
-      </div>
-
-      {!collapsed && (
-        <div className="mt-2 space-y-2 pl-2 border-l-2 border-slate-200">
-          {outcome.outputs.map((output) => (
-            <OutputCard
-              key={output.id}
-              outcomeId={outcome.id}
-              output={output}
-              collapsed={collapsedOutputs.has(output.id)}
-              collapsedActivities={collapsedActivities}
-              onToggle={onToggleOutput}
-              onToggleActivity={onToggleActivity}
-              onRename={onRenameOutput}
-              onRemove={onRemoveOutput}
-              onRenameActivity={onRenameActivity}
-              onRemoveActivity={onRemoveActivity}
-              onAddActivity={onAddActivity}
-              onOpenBudgetLine={onOpenBudgetLine}
-              onRemoveBudgetLine={onRemoveBudgetLine}
-            />
-          ))}
-          <button type="button" className="btn btn-sm btn-light" onClick={() => onAddOutput(outcome.id)}>
-            Add Output
-          </button>
-        </div>
-      )}
-    </div>
-  );
-});
+      <DropdownMenuItem onClick={onRemove} className="gap-2 text-rose-600 focus:text-rose-600">
+        <Trash2 size={14} /> {removeLabel}
+      </DropdownMenuItem>
+    </DropdownMenuContent>
+  </DropdownMenu>
+);
 
 export const ProjectsPage = () => {
   const { auth } = useAuthContext();
+  const { setPageActions } = useDemo8Layout();
   const permissions = useMemo(() => getPermissionsFromToken(auth?.access_token), [auth?.access_token]);
   const canManagePrograms = Boolean(
     permissions.can_manage_programs ||
@@ -421,21 +129,21 @@ export const ProjectsPage = () => {
     fetchPolicy: 'network-only'
   });
 
-  const [createProgram] = useMutation<
-    { createProgram: { success: boolean; message?: string; program?: ProgramRecord | null } },
-    { input: Record<string, unknown> }
-  >(CREATE_PROGRAM, {
+  const [createProgram] = useMutation<{
+    createProgram: { success: boolean; message?: string; program?: ProgramRecord | null };
+  }, { input: Record<string, unknown> }>(CREATE_PROGRAM, {
     refetchQueries: [{ query: GET_PROGRAMS }, { query: GET_PROGRAM_MANAGERS }],
     awaitRefetchQueries: true
   });
-  const [saveProgramStructure] = useMutation<{ saveProgramStructure: { success: boolean; message?: string } }, { input: Record<string, unknown> }>(
-    SAVE_PROGRAM_STRUCTURE,
-    {
-      refetchQueries: [{ query: GET_PROGRAMS }],
-      awaitRefetchQueries: true
-    }
-  );
-  const [deleteProgram] = useMutation<{ deleteProgram: { success: boolean; message?: string } }, { id: string }>(DELETE_PROGRAM, {
+  const [saveProgramStructure] = useMutation<{
+    saveProgramStructure: { success: boolean; message?: string };
+  }, { input: Record<string, unknown> }>(SAVE_PROGRAM_STRUCTURE, {
+    refetchQueries: [{ query: GET_PROGRAMS }],
+    awaitRefetchQueries: true
+  });
+  const [deleteProgram] = useMutation<{
+    deleteProgram: { success: boolean; message?: string };
+  }, { id: string }>(DELETE_PROGRAM, {
     refetchQueries: [{ query: GET_PROGRAMS }],
     awaitRefetchQueries: true
   });
@@ -450,7 +158,6 @@ export const ProjectsPage = () => {
   const programs = data?.programs || [];
   const managers = managerData?.programManagers || [];
 
-  const [searchParams, setSearchParams] = useSearchParams();
   const [selectedProgramId, setSelectedProgramId] = useState('');
   const [draftProgram, setDraftProgram] = useState<ProgramRecord | null>(null);
   const [structureDirty, setStructureDirty] = useState(false);
@@ -458,6 +165,7 @@ export const ProjectsPage = () => {
   const [createOpen, setCreateOpen] = useState(false);
   const [creatingProgram, setCreatingProgram] = useState(false);
   const [createError, setCreateError] = useState('');
+  const [saveError, setSaveError] = useState('');
   const [programName, setProgramName] = useState('');
   const [programDescription, setProgramDescription] = useState('');
   const [budgetAmount, setBudgetAmount] = useState('');
@@ -467,10 +175,10 @@ export const ProjectsPage = () => {
   const [deletingProgramId, setDeletingProgramId] = useState<string | null>(null);
   const [budgetSheetOpen, setBudgetSheetOpen] = useState(false);
   const [budgetDraft, setBudgetDraft] = useState<BudgetLineDraft | null>(null);
-  const [collapsedOutcomes, setCollapsedOutcomes] = useState<Set<string>>(new Set());
-  const [collapsedOutputs, setCollapsedOutputs] = useState<Set<string>>(new Set());
-  const [collapsedActivities, setCollapsedActivities] = useState<Set<string>>(new Set());
-
+  const [selectedOutcomeId, setSelectedOutcomeId] = useState<string | null>(null);
+  const [selectedOutputId, setSelectedOutputId] = useState<string | null>(null);
+  const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null);
+  const [nodeEditor, setNodeEditor] = useState<PlanNodeEditor | null>(null);
   const budgetFileInputRef = useRef<HTMLInputElement>(null);
   const [budgetUploadSheetOpen, setBudgetUploadSheetOpen] = useState(false);
   const [budgetUploadErrors, setBudgetUploadErrors] = useState<string[]>([]);
@@ -483,18 +191,12 @@ export const ProjectsPage = () => {
   const [editingDescription, setEditingDescription] = useState(false);
   const [descriptionDraft, setDescriptionDraft] = useState('');
 
-  const toggleId = useCallback((setter: Dispatch<SetStateAction<Set<string>>>, id: string) => {
-    setter((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
-
-  const toggleOutcome = useCallback((outcomeId: string) => toggleId(setCollapsedOutcomes, outcomeId), [toggleId]);
-  const toggleOutput = useCallback((outputId: string) => toggleId(setCollapsedOutputs, outputId), [toggleId]);
-  const toggleActivity = useCallback((activityId: string) => toggleId(setCollapsedActivities, activityId), [toggleId]);
+  const activityTotal = (activity: ProgramRecord['outcomes'][number]['outputs'][number]['activities'][number]) =>
+    activity.budgetLines.reduce((sum, line) => sum + Number(line.totalAmount || 0), 0);
+  const outputTotal = (output: ProgramRecord['outcomes'][number]['outputs'][number]) =>
+    output.activities.reduce((sum, activity) => sum + activityTotal(activity), 0);
+  const outcomeTotal = (outcome: ProgramRecord['outcomes'][number]) =>
+    outcome.outputs.reduce((sum, output) => sum + outputTotal(output), 0);
 
   useEffect(() => {
     if (!programs.length) {
@@ -503,39 +205,20 @@ export const ProjectsPage = () => {
       return;
     }
 
-    // Deep-link support: a notification (or any other external link) can
-    // send the user here with ?program=<id> to jump straight to that
-    // program instead of whatever would otherwise be selected by default.
-    const requestedProgramId = searchParams.get('program');
-    if (requestedProgramId && programs.some((program) => program.id === requestedProgramId)) {
-      if (selectedProgramId !== requestedProgramId) {
-        setSelectedProgramId(requestedProgramId);
-      }
-      setSearchParams(
-        (prev) => {
-          prev.delete('program');
-          return prev;
-        },
-        { replace: true }
-      );
-      return;
-    }
-
     if (!selectedProgramId || !programs.some((program) => program.id === selectedProgramId)) {
       setSelectedProgramId(programs[0].id);
     }
-  }, [programs, selectedProgramId, searchParams, setSearchParams]);
+  }, [programs, selectedProgramId]);
 
   useEffect(() => {
     const selected = programs.find((program) => program.id === selectedProgramId) || null;
-    // Reuse the server copy directly rather than deep-cloning it: our update
-    // helpers only ever replace nodes immutably, so a defensive clone here
-    // was never buying us anything beyond a wasted full-tree copy per switch.
-    setDraftProgram(selected);
+    setDraftProgram(selected ? cloneProgram(selected) : null);
     setStructureDirty(false);
     setEditingDescription(false);
     setDescriptionDraft(selected?.description || '');
-    setBudgetUploadErrors([]);
+    setSelectedOutcomeId(null);
+    setSelectedOutputId(null);
+    setSelectedActivityId(null);
   }, [programs, selectedProgramId]);
 
   const selectedProgram = draftProgram;
@@ -544,183 +227,253 @@ export const ProjectsPage = () => {
   // that pair, it just reads/writes through it.
   const adminOutcome = selectedProgram?.type === 'Admin' ? selectedProgram.outcomes[0] : undefined;
   const adminOutput = adminOutcome?.outputs[0];
+  const selectedOutcome = selectedProgram?.outcomes.find((item) => item.id === selectedOutcomeId);
+  const selectedOutput = selectedOutcome?.outputs.find((item) => item.id === selectedOutputId);
+  const selectedActivity = (selectedProgram?.type === 'Admin'
+    ? adminOutput?.activities
+    : selectedOutput?.activities
+  )?.find((item) => item.id === selectedActivityId);
 
-  const updateDraft = useCallback((updater: (program: ProgramRecord) => ProgramRecord) => {
-    setDraftProgram((current) => (current ? updater(current) : current));
+  const updateDraft = (updater: (program: ProgramRecord) => ProgramRecord) => {
+    setDraftProgram((current) => {
+      if (!current) return current;
+      return updater(cloneProgram(current));
+    });
     setStructureDirty(true);
-  }, []);
+  };
 
-  const addOutcome = useCallback(() => {
-    updateDraft((program) => ({
-      ...program,
-      outcomes: [
-        ...program.outcomes,
-        { id: makeId('outcome'), name: `Outcome ${program.outcomes.length + 1}`, sortOrder: program.outcomes.length, outputs: [] }
-      ]
-    }));
-  }, [updateDraft]);
+  const addOutcome = (name: string) => {
+    if (!selectedProgram) return;
+    updateDraft((program) => {
+      program.outcomes.push({
+        id: makeId('outcome'),
+        name,
+        sortOrder: program.outcomes.length,
+        outputs: []
+      });
+      return program;
+    });
+  };
 
-  const addOutput = useCallback(
-    (outcomeId: string) => {
-      updateDraft((program) =>
-        replaceOutcome(program, outcomeId, (outcome) => ({
-          ...outcome,
-          outputs: [
-            ...outcome.outputs,
-            { id: makeId('output'), name: `Output ${outcome.outputs.length + 1}`, sortOrder: outcome.outputs.length, activities: [] }
-          ]
-        }))
-      );
-    },
-    [updateDraft]
-  );
+  const addOutput = (outcomeId: string, name: string) => {
+    updateDraft((program) => {
+      const outcome = program.outcomes.find((item) => item.id === outcomeId);
+      if (!outcome) return program;
+      outcome.outputs.push({
+        id: makeId('output'),
+        name,
+        sortOrder: outcome.outputs.length,
+        activities: []
+      });
+      return program;
+    });
+  };
 
-  const addActivity = useCallback(
-    (outcomeId: string, outputId: string) => {
-      updateDraft((program) =>
-        replaceOutcome(program, outcomeId, (outcome) =>
-          replaceOutput(outcome, outputId, (output) => ({
-            ...output,
-            activities: [
-              ...output.activities,
-              { id: makeId('activity'), name: `Activity ${output.activities.length + 1}`, sortOrder: output.activities.length, budgetLines: [] }
-            ]
-          }))
-        )
-      );
-    },
-    [updateDraft]
-  );
+  const addActivity = (outcomeId: string, outputId: string, name: string) => {
+    updateDraft((program) => {
+      const activityParent = program.outcomes.find((item) => item.id === outcomeId)?.outputs.find((item) => item.id === outputId);
+      if (!activityParent) return program;
+      activityParent.activities.push({
+        id: makeId('activity'),
+        name,
+        sortOrder: activityParent.activities.length,
+        budgetLines: []
+      });
+      return program;
+    });
+  };
 
-  const renameOutcome = useCallback(
-    (outcomeId: string, name: string) => {
-      updateDraft((program) => replaceOutcome(program, outcomeId, (outcome) => ({ ...outcome, name })));
-    },
-    [updateDraft]
-  );
-
-  const renameOutput = useCallback(
-    (outcomeId: string, outputId: string, name: string) => {
-      updateDraft((program) => replaceOutcome(program, outcomeId, (outcome) => replaceOutput(outcome, outputId, (output) => ({ ...output, name }))));
-    },
-    [updateDraft]
-  );
-
-  const renameActivity = useCallback(
-    (outcomeId: string, outputId: string, activityId: string, name: string) => {
-      updateDraft((program) => updateActivityInProgram(program, outcomeId, outputId, activityId, (activity) => ({ ...activity, name })));
-    },
-    [updateDraft]
-  );
-
-  // Opens the sheet both for "Add Budget Line" (budgetLine omitted) and for
-  // editing an existing one (budgetLine passed in directly by the row that
-  // rendered it, so there's no need to re-search the tree for it here).
-  const openBudgetLineSheet = useCallback((outcomeId: string, outputId: string, activityId: string, budgetLine?: BudgetLine) => {
+  const addBudgetLine = (outcomeId: string, outputId: string, activityId: string) => {
     setBudgetDraft({
       outcomeId,
       outputId,
       activityId,
-      budgetLineId: budgetLine?.id || null,
-      name: budgetLine?.name || 'Budget Line',
-      quantity: String(budgetLine?.quantity ?? 1),
-      frequency: String(budgetLine?.frequency ?? 1),
-      unitPrice: String(budgetLine?.unitPrice ?? 0),
-      units: String(budgetLine?.units ?? '')
+      budgetLineId: null,
+      name: ``,
+      quantity: '1',
+      frequency: '1',
+      unitPrice: '0',
+      units: ''
     });
     setBudgetSheetOpen(true);
-  }, []);
+  };
 
-  const handleSaveBudgetLine = useCallback(() => {
+  const renameOutcome = (outcomeId: string, name: string) => {
+    updateDraft((program) => {
+      const outcome = program.outcomes.find((item) => item.id === outcomeId);
+      if (outcome) outcome.name = name;
+      return program;
+    });
+  };
+
+  const renameOutput = (outcomeId: string, outputId: string, name: string) => {
+    updateDraft((program) => {
+      const output = program.outcomes.find((item) => item.id === outcomeId)?.outputs.find((item) => item.id === outputId);
+      if (output) output.name = name;
+      return program;
+    });
+  };
+
+  const renameActivity = (outcomeId: string, outputId: string, activityId: string, name: string) => {
+    updateDraft((program) => {
+      const activity = program.outcomes
+        .find((item) => item.id === outcomeId)
+        ?.outputs.find((item) => item.id === outputId)
+        ?.activities.find((item) => item.id === activityId);
+      if (activity) activity.name = name;
+      return program;
+    });
+  };
+
+  const handleSaveNodeName = () => {
+    const name = nodeEditor?.name.trim();
+    if (!nodeEditor || !name) return;
+
+    if (nodeEditor.mode === 'create') {
+      if (nodeEditor.kind === 'outcome') {
+        addOutcome(name);
+      } else if (nodeEditor.kind === 'output' && nodeEditor.outcomeId) {
+        addOutput(nodeEditor.outcomeId, name);
+      } else if (
+        nodeEditor.kind === 'activity' &&
+        nodeEditor.outcomeId &&
+        nodeEditor.outputId
+      ) {
+        addActivity(nodeEditor.outcomeId, nodeEditor.outputId, name);
+      }
+
+      setNodeEditor(null);
+      return;
+    }
+
+    if (nodeEditor.kind === 'outcome' && nodeEditor.outcomeId) {
+      renameOutcome(nodeEditor.outcomeId, name);
+    } else if (
+      nodeEditor.kind === 'output' &&
+      nodeEditor.outcomeId &&
+      nodeEditor.outputId
+    ) {
+      renameOutput(nodeEditor.outcomeId, nodeEditor.outputId, name);
+    } else if (
+      nodeEditor.kind === 'activity' &&
+      nodeEditor.outcomeId &&
+      nodeEditor.outputId &&
+      nodeEditor.activityId
+    ) {
+      renameActivity(
+        nodeEditor.outcomeId,
+        nodeEditor.outputId,
+        nodeEditor.activityId,
+        name
+      );
+    }
+
+    setNodeEditor(null);
+  };
+
+  const openBudgetLineSheet = (outcomeId: string, outputId: string, activityId: string, budgetLineId?: string) => {
+    const existingBudgetLine = budgetLineId
+      ? selectedProgram?.outcomes
+          .find((item) => item.id === outcomeId)
+          ?.outputs.find((item) => item.id === outputId)
+          ?.activities.find((item) => item.id === activityId)
+          ?.budgetLines.find((item) => item.id === budgetLineId)
+      : null;
+
+    setBudgetDraft({
+      outcomeId,
+      outputId,
+      activityId,
+      budgetLineId: existingBudgetLine?.id || null,
+      name: existingBudgetLine?.name || 'Budget Line',
+      quantity: String(existingBudgetLine?.quantity ?? 1),
+      frequency: String(existingBudgetLine?.frequency ?? 1),
+      unitPrice: String(existingBudgetLine?.unitPrice ?? 0),
+      units: String(existingBudgetLine?.units ?? '')
+    });
+    setBudgetSheetOpen(true);
+  };
+
+  const handleSaveBudgetLine = () => {
     if (!budgetDraft) return;
-    const totalAmount = calculateBudgetLineTotal(budgetDraft);
 
-    updateDraft((program) =>
-      updateActivityInProgram(program, budgetDraft.outcomeId, budgetDraft.outputId, budgetDraft.activityId, (activity) => {
-        const isExisting = budgetDraft.budgetLineId && activity.budgetLines.some((line) => line.id === budgetDraft.budgetLineId);
+    updateDraft((program) => {
+      const outcome = program.outcomes.find((item) => item.id === budgetDraft.outcomeId);
+      const output = outcome?.outputs.find((item) => item.id === budgetDraft.outputId);
+      const activity = output?.activities.find((item) => item.id === budgetDraft.activityId);
+      if (!activity) return program;
 
-        if (isExisting) {
-          return {
-            ...activity,
-            budgetLines: activity.budgetLines.map((line) =>
-              line.id === budgetDraft.budgetLineId
-                ? {
-                    ...line,
-                    name: budgetDraft.name.trim() || 'Budget Line',
-                    quantity: Number(budgetDraft.quantity || 0),
-                    frequency: Number(budgetDraft.frequency || 0),
-                    unitPrice: Number(budgetDraft.unitPrice || 0),
-                    units: budgetDraft.units || '',
-                    totalAmount
-                  }
-                : line
-            )
-          };
-        }
+      const totalAmount = calculateBudgetLineTotal(budgetDraft);
+      const existingBudgetLine = budgetDraft.budgetLineId
+        ? activity.budgetLines.find((item) => item.id === budgetDraft.budgetLineId)
+        : null;
 
-        return {
-          ...activity,
-          budgetLines: [
-            ...activity.budgetLines,
-            {
-              id: makeId('line'),
-              name: budgetDraft.name.trim() || 'Budget Line',
-              quantity: Number(budgetDraft.quantity || 0),
-              frequency: Number(budgetDraft.frequency || 0),
-              unitPrice: Number(budgetDraft.unitPrice || 0),
-              units: budgetDraft.units || '',
-              totalAmount,
-              sortOrder: activity.budgetLines.length
-            }
-          ]
-        };
-      })
-    );
+      if (existingBudgetLine) {
+        existingBudgetLine.name = budgetDraft.name.trim() || 'Budget Line';
+        existingBudgetLine.quantity = Number(budgetDraft.quantity || 0);
+        existingBudgetLine.frequency = Number(budgetDraft.frequency || 0);
+        existingBudgetLine.unitPrice = Number(budgetDraft.unitPrice || 0);
+        existingBudgetLine.units = budgetDraft.units || '';
+        existingBudgetLine.totalAmount = totalAmount;
+        existingBudgetLine.sortOrder = existingBudgetLine.sortOrder;
+      } else {
+        activity.budgetLines.push({
+          id: makeId('line'),
+          name: budgetDraft.name.trim() || 'Budget Line',
+          quantity: Number(budgetDraft.quantity || 0),
+          frequency: Number(budgetDraft.frequency || 0),
+          unitPrice: Number(budgetDraft.unitPrice || 0),
+          units: budgetDraft.units || '',
+          totalAmount,
+          sortOrder: activity.budgetLines.length
+        });
+      }
+
+      return program;
+    });
 
     setBudgetSheetOpen(false);
     setBudgetDraft(null);
-  }, [budgetDraft, updateDraft]);
+  };
 
-  const removeOutcome = useCallback(
-    (outcomeId: string) => {
-      updateDraft((program) => ({ ...program, outcomes: program.outcomes.filter((outcome) => outcome.id !== outcomeId) }));
-    },
-    [updateDraft]
-  );
+  const removeOutcome = (outcomeId: string) => {
+    updateDraft((program) => {
+      program.outcomes = program.outcomes.filter((item) => item.id !== outcomeId);
+      return program;
+    });
+  };
 
-  const removeOutput = useCallback(
-    (outcomeId: string, outputId: string) => {
-      updateDraft((program) =>
-        replaceOutcome(program, outcomeId, (outcome) => ({ ...outcome, outputs: outcome.outputs.filter((output) => output.id !== outputId) }))
-      );
-    },
-    [updateDraft]
-  );
+  const removeOutput = (outcomeId: string, outputId: string) => {
+    updateDraft((program) => {
+      const outcome = program.outcomes.find((item) => item.id === outcomeId);
+      if (!outcome) return program;
+      outcome.outputs = outcome.outputs.filter((item) => item.id !== outputId);
+      return program;
+    });
+  };
 
-  const removeActivity = useCallback(
-    (outcomeId: string, outputId: string, activityId: string) => {
-      updateDraft((program) =>
-        replaceOutcome(program, outcomeId, (outcome) =>
-          replaceOutput(outcome, outputId, (output) => ({ ...output, activities: output.activities.filter((activity) => activity.id !== activityId) }))
-        )
-      );
-    },
-    [updateDraft]
-  );
+  const removeActivity = (outcomeId: string, outputId: string, activityId: string) => {
+    updateDraft((program) => {
+      const output = program.outcomes.find((item) => item.id === outcomeId)?.outputs.find((item) => item.id === outputId);
+      if (!output) return program;
+      output.activities = output.activities.filter((item) => item.id !== activityId);
+      return program;
+    });
+  };
 
-  const removeBudgetLine = useCallback(
-    (outcomeId: string, outputId: string, activityId: string, budgetLineId: string) => {
-      updateDraft((program) =>
-        updateActivityInProgram(program, outcomeId, outputId, activityId, (activity) => ({
-          ...activity,
-          budgetLines: activity.budgetLines.filter((line) => line.id !== budgetLineId)
-        }))
-      );
-    },
-    [updateDraft]
-  );
+  const removeBudgetLine = (outcomeId: string, outputId: string, activityId: string, budgetLineId: string) => {
+    updateDraft((program) => {
+      const activity = program.outcomes
+        .find((item) => item.id === outcomeId)
+        ?.outputs.find((item) => item.id === outputId)
+        ?.activities.find((item) => item.id === activityId);
+      if (!activity) return program;
+      activity.budgetLines = activity.budgetLines.filter((item) => item.id !== budgetLineId);
+      return program;
+    });
+  };
 
-  const handleOpenCreateProgram = () => {
+  const handleOpenCreateProgram = useCallback(() => {
     setEditingProgramId(null);
     setProgramName('');
     setProgramDescription('');
@@ -729,7 +482,17 @@ export const ProjectsPage = () => {
     setProgramType('Activity');
     setCreateError('');
     setCreateOpen(true);
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!canManagePrograms) {
+      setPageActions([]);
+      return;
+    }
+
+    setPageActions([{ label: 'New Program', onClick: handleOpenCreateProgram, icon: 'plus' }]);
+    return () => setPageActions([]);
+  }, [canManagePrograms, handleOpenCreateProgram, setPageActions]);
 
   const handleOpenEditProgram = (program: ProgramRecord) => {
     setEditingProgramId(program.id);
@@ -767,7 +530,7 @@ export const ProjectsPage = () => {
       setCreateError('Program name is required.');
       return;
     }
-
+    
     setCreatingProgram(true);
     try {
       const response = await createProgram({
@@ -783,6 +546,8 @@ export const ProjectsPage = () => {
           }
         }
       });
+
+      console.log('createProgram response:', response);
 
       const savedProgram = response.data?.createProgram?.program;
       const wasEdit = Boolean(editingProgramId);
@@ -811,6 +576,7 @@ export const ProjectsPage = () => {
     if (!selectedProgram) return;
 
     setSavingStructure(true);
+    setSaveError('');
 
     try {
       const response = await saveProgramStructure({
@@ -854,10 +620,19 @@ export const ProjectsPage = () => {
       setStructureDirty(false);
       toast.success('Program structure saved successfully.');
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to save program structure.');
+      toast.error(error instanceof Error ? error.message: 'Failed to save program structure.' );
+      // setSaveError(error instanceof Error ? error.message : 'Failed to save program structure.');
     } finally {
       setSavingStructure(false);
     }
+  };
+
+  const handleSaveDescription = () => {
+    updateDraft((program) => {
+      program.description = descriptionDraft.trim();
+      return program;
+    });
+    setEditingDescription(false);
   };
 
   const handleUploadBudgetClick = () => {
@@ -867,7 +642,6 @@ export const ProjectsPage = () => {
 
   const handleBudgetFileSelected = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] || null;
-    // Reset so picking the same file again (e.g. after fixing it) still fires onChange.
     event.target.value = '';
     if (!file || !selectedProgram) return;
 
@@ -877,16 +651,16 @@ export const ProjectsPage = () => {
     if (!confirmed) return;
 
     setBudgetUploadErrors([]);
-
     try {
       const response = await uploadProgramBudget({ variables: { programId: selectedProgram.id, file } });
       const result = response.data?.uploadProgramBudget;
 
       if (result?.success) {
+        setBudgetUploadSheetOpen(false);
         toast.success(result.message);
       } else if (result?.errors?.length) {
         setBudgetUploadErrors(result.errors);
-        toast.error('The file has errors - see details below.');
+        toast.error('The file has errors. Review the details and try again.');
       } else {
         toast.error(result?.message || 'Unable to upload this budget. Please try again.');
       }
@@ -895,32 +669,9 @@ export const ProjectsPage = () => {
     }
   };
 
-  const handleSaveDescription = () => {
-    updateDraft((program) => ({ ...program, description: descriptionDraft.trim() }));
-    setEditingDescription(false);
-  };
-
   return (
     <Container>
-      <div className="space-y-7 lg:space-y-9">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            {/* <h1 className="text-xl lg:text-2xl font-semibold text-slate-900">Programs</h1> */}
-            <DashboardSectionHeading id="analytics-heading" title="Analytics" />
-            <p className="text-sm text-slate-500 mt-1">
-              Create programs first, assign a manager and budget, then build outcomes, outputs, activities, and budget lines.
-            </p>
-          </div>
-
-          {canManagePrograms && (
-            <button type="button" className="btn btn-primary" onClick={handleOpenCreateProgram}>
-              New Program
-            </button>
-          )}
-        </div>
-
-        <Separator className="bg-slate-200" />
-
+      <div className="py-4 sm:py-5 lg:py-6">
         {loading ? (
           <div className="grid lg:grid-cols-3 gap-4">
             <div className="card p-4 lg:col-span-1 space-y-3">
@@ -936,36 +687,26 @@ export const ProjectsPage = () => {
             </div>
           </div>
         ) : error ? (
-          <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">Failed to load programs.</div>
+          <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+            Failed to load programs.
+          </div>
         ) : (
           <div className="grid lg:grid-cols-3 gap-4">
             <aside className="card p-4 lg:col-span-1 space-y-2">
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex min-h-8 items-center justify-between gap-2">
                 <h3 className="text-sm font-semibold text-slate-900">Programs</h3>
-                {canManagePrograms && (
-                  <button type="button" className="btn btn-sm btn-light" onClick={handleOpenCreateProgram}>
-                    Create Program
-                  </button>
-                )}
               </div>
 
               {programs.length === 0 ? (
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-600 space-y-3">
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-600">
                   <p>No programs have been created yet.</p>
-                  {canManagePrograms && (
-                    <button type="button" className="btn btn-sm btn-primary" onClick={handleOpenCreateProgram}>
-                      Create First Program
-                    </button>
-                  )}
                 </div>
               ) : (
                 programs.map((program) => (
                   <div
                     key={program.id}
                     onClick={() => setSelectedProgramId(program.id)}
-                    className={`w-full rounded-lg border px-3 py-2 text-left cursor-pointer flex items-start justify-between gap-2 ${
-                      selectedProgram?.id === program.id ? 'border-blue-200 bg-blue-50' : 'border-slate-200 bg-white hover:bg-slate-50'
-                    }`}
+                    className={`w-full rounded-lg border px-3 py-2 text-left cursor-pointer flex items-start justify-between gap-2 ${selectedProgram?.id === program.id ? 'border-blue-200 bg-blue-50' : 'border-slate-200 bg-white hover:bg-slate-50'}`}
                   >
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-slate-900 truncate">{program.name}</p>
@@ -988,168 +729,383 @@ export const ProjectsPage = () => {
               )}
             </aside>
 
-            <section className="card p-4 lg:col-span-2 space-y-4">
+            <section className="card overflow-hidden lg:col-span-2">
               {!selectedProgram ? (
-                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-3">
-                  <p className="text-sm text-slate-500">Select a program to manage its hierarchy.</p>
-                  {canManagePrograms && (
-                    <button type="button" className="btn btn-primary" onClick={() => setCreateOpen(true)}>
-                      Create Program
-                    </button>
-                  )}
+                <div className="p-6">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-5 text-sm text-slate-600">
+                    Select a program to view its plan.
+                  </div>
                 </div>
               ) : (
                 <>
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="flex-1 min-w-[220px]">
-                      <h2 className="text-lg font-semibold text-slate-900">{selectedProgram.name}</h2>
+                  <div className="border-b border-slate-200 p-5 sm:p-6">
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h2 className="text-xl font-bold tracking-[-0.02em] text-[#172550]">
+                            {selectedProgram.name}
+                          </h2>
+                          <span className="rounded-full bg-[#e9f8fc] px-2.5 py-1 text-[11px] font-bold text-[#227f9e]">
+                            {selectedProgram.type === 'Admin' ? 'Administrative program' : 'Standard program'}
+                          </span>
+                          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-bold capitalize text-emerald-700">
+                            {selectedProgram.status}
+                          </span>
+                        </div>
 
-                      {editingDescription ? (
-                        <div className="mt-1 flex items-start gap-2">
-                          <input
-                            autoFocus
-                            className="input flex-1"
-                            value={descriptionDraft}
-                            placeholder="Add a brief program description..."
-                            onChange={(event) => setDescriptionDraft(event.target.value)}
-                            onKeyDown={(event) => {
-                              if (event.key === 'Enter') handleSaveDescription();
-                              if (event.key === 'Escape') {
-                                setDescriptionDraft(selectedProgram.description || '');
-                                setEditingDescription(false);
-                              }
-                            }}
-                          />
-                          <button type="button" className="btn btn-sm btn-primary" onClick={handleSaveDescription}>
-                            Save
-                          </button>
+                        {editingDescription ? (
+                          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                            <input
+                              autoFocus
+                              className="input flex-1"
+                              value={descriptionDraft}
+                              placeholder="Add a short description"
+                              onChange={(event) => setDescriptionDraft(event.target.value)}
+                              onKeyDown={(event) => {
+                                if (event.key === 'Enter') handleSaveDescription();
+                                if (event.key === 'Escape') {
+                                  setDescriptionDraft(selectedProgram.description || '');
+                                  setEditingDescription(false);
+                                }
+                              }}
+                            />
+                            <div className="flex gap-2">
+                              <button type="button" className="btn btn-sm btn-primary" onClick={handleSaveDescription}>Save</button>
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-light"
+                                onClick={() => {
+                                  setDescriptionDraft(selectedProgram.description || '');
+                                  setEditingDescription(false);
+                                }}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
                           <button
                             type="button"
-                            className="btn btn-sm btn-light"
+                            className="mt-2 flex max-w-2xl items-center gap-1.5 text-left text-sm text-slate-500 outline-none hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-[#2aaed3]"
                             onClick={() => {
                               setDescriptionDraft(selectedProgram.description || '');
-                              setEditingDescription(false);
+                              setEditingDescription(true);
                             }}
                           >
-                            Cancel
+                            <span>{selectedProgram.description || 'Add a short program description'}</span>
+                            <Pencil size={12} className="shrink-0" />
                           </button>
-                        </div>
-                      ) : (
+                        )}
+                      </div>
+                      {canManagePrograms && (
                         <button
                           type="button"
-                          className="mt-1 flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700"
-                          onClick={() => {
-                            setDescriptionDraft(selectedProgram.description || '');
-                            setEditingDescription(true);
-                          }}
+                          className="btn btn-sm btn-light shrink-0 gap-1.5"
+                          onClick={() => setBudgetUploadSheetOpen(true)}
                         >
-                          <span>{selectedProgram.description || 'Add a brief program description...'}</span>
-                          <Pencil size={12} className="shrink-0 text-slate-400" />
+                          <Upload size={14} />
+                          Import budget
                         </button>
                       )}
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {selectedProgram.type === 'Admin' && (
-                        <span className="badge badge-outline border-purple-200 bg-purple-50 text-purple-700">Admin</span>
-                      )}
-                      <span className="badge badge-outline border-blue-200 bg-blue-50 text-blue-700">{selectedProgram.status}</span>
-                    </div>
+
+                    <dl className="mt-5 grid gap-3 sm:grid-cols-3">
+                      <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+                        <dt className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400">Total budget</dt>
+                        <dd className="mt-1 text-sm font-bold text-slate-800">{formatMoney(selectedProgram.budgetAmount)}</dd>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+                        <dt className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400">Program manager</dt>
+                        <dd className="mt-1 truncate text-sm font-bold text-slate-800">{selectedProgram.programManagerName || 'Not assigned'}</dd>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+                        <dt className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400">Plan summary</dt>
+                        <dd className="mt-1 text-sm font-bold text-slate-800">
+                          {selectedProgram.type === 'Admin'
+                            ? `${adminOutput?.activities.length || 0} activities`
+                            : `${selectedProgram.outcomes.length} outcomes`}
+                        </dd>
+                      </div>
+                    </dl>
                   </div>
 
-                  {canManagePrograms && (
-                    <div className="flex items-center gap-2">
-                      <button type="button" className="btn btn-sm btn-light gap-1.5" onClick={() => setBudgetUploadSheetOpen(true)}>
-                        <Upload size={14} />
-                        Import Budget
+                  <div className="p-5 sm:p-6">
+                    <nav aria-label="Program plan location" className="mb-5 flex flex-wrap items-center gap-1.5 text-xs font-semibold">
+                      <button
+                        type="button"
+                        className="rounded-md px-2 py-1 text-[#227f9e] hover:bg-[#e9f8fc]"
+                        onClick={() => {
+                          setSelectedOutcomeId(null);
+                          setSelectedOutputId(null);
+                          setSelectedActivityId(null);
+                        }}
+                      >
+                        Program plan
                       </button>
-                    </div>
-                  )}
+                      {selectedProgram.type !== 'Admin' && selectedOutcome && (
+                        <>
+                          <ChevronRight className="size-3.5 text-slate-300" />
+                          <button
+                            type="button"
+                            className="max-w-48 truncate rounded-md px-2 py-1 text-[#227f9e] hover:bg-[#e9f8fc]"
+                            onClick={() => {
+                              setSelectedOutputId(null);
+                              setSelectedActivityId(null);
+                            }}
+                          >
+                            {selectedOutcome.name}
+                          </button>
+                        </>
+                      )}
+                      {selectedProgram.type !== 'Admin' && selectedOutput && (
+                        <>
+                          <ChevronRight className="size-3.5 text-slate-300" />
+                          <button
+                            type="button"
+                            className="max-w-48 truncate rounded-md px-2 py-1 text-[#227f9e] hover:bg-[#e9f8fc]"
+                            onClick={() => setSelectedActivityId(null)}
+                          >
+                            {selectedOutput.name}
+                          </button>
+                        </>
+                      )}
+                      {selectedActivity && (
+                        <>
+                          <ChevronRight className="size-3.5 text-slate-300" />
+                          <span className="max-w-48 truncate rounded-md px-2 py-1 text-slate-500">{selectedActivity.name}</span>
+                        </>
+                      )}
+                    </nav>
 
-                  <div className="grid md:grid-cols-3 gap-3">
-                    <div>
-                      <label className="form-label text-slate-900">Program Budget</label>
-                      <input className="input" value={formatMoney(selectedProgram.budgetAmount)} readOnly />
-                    </div>
-                    <div>
-                      <label className="form-label text-slate-900">Program Manager</label>
-                      <input className="input" value={selectedProgram.programManagerName || 'Unassigned'} readOnly />
-                    </div>
-                  </div>
+                    <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+                      <div>
+                        <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#2aaed3]">
+                          {selectedActivity ? 'Budget level' : selectedOutput ? 'Activity level' : selectedOutcome ? 'Output level' : selectedProgram.type === 'Admin' ? 'Activity level' : 'Outcome level'}
+                        </p>
+                        <h3 className="mt-1 text-lg font-bold text-[#172550]">
+                          {selectedActivity ? 'Budget items' : selectedOutput ? 'Activities' : selectedOutcome ? 'Outputs' : selectedProgram.type === 'Admin' ? 'Activities' : 'Outcomes'}
+                        </h3>
+                        <p className="mt-1 text-sm text-slate-500">
+                          {selectedActivity
+                            ? `Costs required to complete ${selectedActivity.name}.`
+                            : selectedOutput
+                              ? `The work needed to deliver ${selectedOutput.name}.`
+                              : selectedOutcome
+                                ? `The measurable results that support ${selectedOutcome.name}.`
+                                : selectedProgram.type === 'Admin'
+                                  ? 'The work carried out under this administrative program.'
+                                  : 'The changes this program is expected to achieve.'}
+                        </p>
+                      </div>
 
-                  {selectedProgram.type === 'Admin' ? (
-                    <>
-                      <div className="space-y-2 max-h-[600px] overflow-y-auto pr-1">
-                        {!adminOutcome || !adminOutput ? (
-                          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                            This admin program is missing its budget container. Please contact support.
+                      {canManagePrograms && !selectedActivity && (
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          disabled={selectedProgram.type === 'Admin' && (!adminOutcome || !adminOutput)}
+                          onClick={() => {
+                            if (selectedOutput && selectedOutcome) {
+                              setNodeEditor({ mode: 'create', kind: 'activity', name: '', outcomeId: selectedOutcome.id, outputId: selectedOutput.id });
+                            } else if (selectedOutcome) {
+                              setNodeEditor({ mode: 'create', kind: 'output', name: '', outcomeId: selectedOutcome.id });
+                            } else if (selectedProgram.type === 'Admin' && adminOutcome && adminOutput) {
+                              setNodeEditor({ mode: 'create', kind: 'activity', name: '', outcomeId: adminOutcome.id, outputId: adminOutput.id });
+                            } else {
+                              setNodeEditor({ mode: 'create', kind: 'outcome', name: '' });
+                            }
+                          }}
+                        >
+                          {selectedOutput
+                            ? `Add activity`
+                            : selectedOutcome
+                              ? 'Add output'
+                              : selectedProgram.type === 'Admin'
+                                ? 'Add activity'
+                                : 'Add outcome'}
+                        </button>
+                      )}
+
+                      {canManagePrograms && selectedActivity && (
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          onClick={() => {
+                            if (selectedProgram.type === 'Admin' && adminOutcome && adminOutput) {
+                              addBudgetLine(adminOutcome.id, adminOutput.id, selectedActivity.id);
+                            } else if (selectedOutcome && selectedOutput) {
+                              addBudgetLine(selectedOutcome.id, selectedOutput.id, selectedActivity.id);
+                            }
+                          }}
+                        >
+                          Add budget item
+                        </button>
+                      )}
+                    </div>
+
+                    {!adminOutcome && selectedProgram.type === 'Admin' ? (
+                      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                        This program is missing its activity container. Contact support to restore it.
+                      </div>
+                    ) : selectedActivity ? (
+                      <div className="space-y-3">
+                        {selectedActivity.budgetLines.length === 0 ? (
+                          <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-7 text-center text-sm text-slate-500">
+                            No budget items have been added to this activity.
                           </div>
                         ) : (
-                          adminOutput.activities.map((activity) => (
-                            <ActivityCard
-                              key={activity.id}
-                              outcomeId={adminOutcome.id}
-                              outputId={adminOutput.id}
-                              activity={activity}
-                              collapsed={collapsedActivities.has(activity.id)}
-                              onToggle={toggleActivity}
-                              onRename={renameActivity}
-                              onRemove={removeActivity}
-                              onOpenBudgetLine={openBudgetLineSheet}
-                              onRemoveBudgetLine={removeBudgetLine}
-                            />
+                          selectedActivity.budgetLines.map((budgetLine) => (
+                            <div key={budgetLine.id} className="rounded-xl border border-slate-200 bg-white p-4">
+                              <div className="flex flex-wrap items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <p className="text-sm font-bold text-slate-900">{budgetLine.name}</p>
+                                  <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2 text-xs text-slate-500">
+                                    <span><strong className="font-semibold text-slate-700">Quantity:</strong> {budgetLine.quantity}</span>
+                                    <span><strong className="font-semibold text-slate-700">Frequency:</strong> {budgetLine.frequency}</span>
+                                    <span><strong className="font-semibold text-slate-700">Unit cost:</strong> {formatMoney(budgetLine.unitPrice)}</span>
+                                    {budgetLine.units && <span><strong className="font-semibold text-slate-700">Unit:</strong> {budgetLine.units}</span>}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <div className="text-right">
+                                    <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Total</p>
+                                    <p className="text-sm font-bold text-[#172550]">{formatMoney(budgetLine.totalAmount)}</p>
+                                  </div>
+                                  {canManagePrograms && (
+                                    <RowActionsMenu
+                                      editLabel="Edit budget item"
+                                      onEdit={() => {
+                                        if (selectedProgram.type === 'Admin' && adminOutcome && adminOutput) {
+                                          openBudgetLineSheet(adminOutcome.id, adminOutput.id, selectedActivity.id, budgetLine.id);
+                                        } else if (selectedOutcome && selectedOutput) {
+                                          openBudgetLineSheet(selectedOutcome.id, selectedOutput.id, selectedActivity.id, budgetLine.id);
+                                        }
+                                      }}
+                                      onRemove={() => {
+                                        if (selectedProgram.type === 'Admin' && adminOutcome && adminOutput) {
+                                          removeBudgetLine(adminOutcome.id, adminOutput.id, selectedActivity.id, budgetLine.id);
+                                        } else if (selectedOutcome && selectedOutput) {
+                                          removeBudgetLine(selectedOutcome.id, selectedOutput.id, selectedActivity.id, budgetLine.id);
+                                        }
+                                      }}
+                                    />
+                                  )}
+                                </div>
+                              </div>
+                            </div>
                           ))
                         )}
                       </div>
-                      <div className="flex items-end gap-2">
-                        <button
-                          type="button"
-                          className="btn btn-light"
-                          disabled={!adminOutcome || !adminOutput}
-                          onClick={() => adminOutcome && adminOutput && addActivity(adminOutcome.id, adminOutput.id)}
-                        >
-                          Add Activity
-                        </button>
-                        <button type="button" className="btn btn-primary" onClick={handleSaveStructure} disabled={!structureDirty || savingStructure}>
-                          {savingStructure ? 'Saving...' : 'Save Structure'}
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
-                        {selectedProgram.outcomes.map((outcome) => (
-                          <OutcomeCard
-                            key={outcome.id}
-                            outcome={outcome}
-                            collapsed={collapsedOutcomes.has(outcome.id)}
-                            collapsedOutputs={collapsedOutputs}
-                            collapsedActivities={collapsedActivities}
-                            onToggle={toggleOutcome}
-                            onToggleOutput={toggleOutput}
-                            onToggleActivity={toggleActivity}
-                            onRename={renameOutcome}
-                            onRemove={removeOutcome}
-                            onRenameOutput={renameOutput}
-                            onRemoveOutput={removeOutput}
-                            onAddOutput={addOutput}
-                            onRenameActivity={renameActivity}
-                            onRemoveActivity={removeActivity}
-                            onAddActivity={addActivity}
-                            onOpenBudgetLine={openBudgetLineSheet}
-                            onRemoveBudgetLine={removeBudgetLine}
-                          />
+                    ) : selectedOutput && selectedOutcome ? (
+                      <div className="space-y-3">
+                        {selectedOutput.activities.length === 0 ? (
+                          <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-7 text-center text-sm text-slate-500">No activities have been added to this output.</div>
+                        ) : selectedOutput.activities.map((activity, index) => (
+                          <div key={activity.id} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3.5">
+                            <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setSelectedActivityId(activity.id)}>
+                              <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-purple-500">Activity {index + 1}</p>
+                              <p className="mt-1 truncate text-sm font-bold text-slate-900">{activity.name}</p>
+                              <p className="mt-1 text-xs text-slate-500">{activity.budgetLines.length} budget items · {formatMoney(activityTotal(activity))}</p>
+                            </button>
+                            {canManagePrograms && (
+                              <RowActionsMenu
+                                onEdit={() => setNodeEditor({ mode: 'edit', kind: 'activity', name: activity.name, outcomeId: selectedOutcome.id, outputId: selectedOutput.id, activityId: activity.id })}
+                                onRemove={() => removeActivity(selectedOutcome.id, selectedOutput.id, activity.id)}
+                              />
+                            )}
+                            <ChevronRight className="size-4 shrink-0 text-slate-300" />
+                          </div>
                         ))}
                       </div>
-                      <div className="flex items-end gap-2">
-                        <button type="button" className="btn btn-light" onClick={addOutcome}>
-                          Add Outcome
-                        </button>
-                        <button type="button" className="btn btn-success" onClick={handleSaveStructure} disabled={!structureDirty || savingStructure}>
-                          {savingStructure ? 'Saving...' : 'Save Structure'}
-                        </button>
+                    ) : selectedOutcome ? (
+                      <div className="space-y-3">
+                        {selectedOutcome.outputs.length === 0 ? (
+                          <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-7 text-center text-sm text-slate-500">No outputs have been added to this outcome.</div>
+                        ) : selectedOutcome.outputs.map((output, index) => (
+                          <div key={output.id} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3.5">
+                            <button type="button" className="min-w-0 flex-1 text-left" onClick={() => { setSelectedOutputId(output.id); setSelectedActivityId(null); }}>
+                              <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-blue-500">Output {index + 1}</p>
+                              <p className="mt-1 truncate text-sm font-bold text-slate-900">{output.name}</p>
+                              <p className="mt-1 text-xs text-slate-500">{output.activities.length} activities · {formatMoney(outputTotal(output))}</p>
+                            </button>
+                            {canManagePrograms && (
+                              <RowActionsMenu
+                                onEdit={() => setNodeEditor({ mode: 'edit', kind: 'output', name: output.name, outcomeId: selectedOutcome.id, outputId: output.id })}
+                                onRemove={() => removeOutput(selectedOutcome.id, output.id)}
+                              />
+                            )}
+                            <ChevronRight className="size-4 shrink-0 text-slate-300" />
+                          </div>
+                        ))}
                       </div>
-                    </>
-                  )}
+                    ) : selectedProgram.type === 'Admin' && adminOutcome && adminOutput ? (
+                      <div className="space-y-3">
+                        {adminOutput.activities.length === 0 ? (
+                          <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-7 text-center text-sm text-slate-500">No activities have been added to this program.</div>
+                        ) : adminOutput.activities.map((activity, index) => (
+                          <div key={activity.id} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3.5">
+                            <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setSelectedActivityId(activity.id)}>
+                              <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-purple-500">Activity {index + 1}</p>
+                              <p className="mt-1 truncate text-sm font-bold text-slate-900">{activity.name}</p>
+                              <p className="mt-1 text-xs text-slate-500">{activity.budgetLines.length} budget items · {formatMoney(activityTotal(activity))}</p>
+                            </button>
+                            {canManagePrograms && (
+                              <RowActionsMenu
+                                onEdit={() => setNodeEditor({ mode: 'edit', kind: 'activity', name: activity.name, outcomeId: adminOutcome.id, outputId: adminOutput.id, activityId: activity.id })}
+                                onRemove={() => removeActivity(adminOutcome.id, adminOutput.id, activity.id)}
+                              />
+                            )}
+                            <ChevronRight className="size-4 shrink-0 text-slate-300" />
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {selectedProgram.outcomes.length === 0 ? (
+                          <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-7 text-center text-sm text-slate-500">No outcomes have been added to this program.</div>
+                        ) : selectedProgram.outcomes.map((outcome, index) => {
+                          const activityCount = outcome.outputs.reduce((total, output) => total + output.activities.length, 0);
+                          return (
+                            <div key={outcome.id} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3.5">
+                              <button type="button" className="min-w-0 flex-1 text-left" onClick={() => { setSelectedOutcomeId(outcome.id); setSelectedOutputId(null); setSelectedActivityId(null); }}>
+                                <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[#2aaed3]">Outcome {index + 1}</p>
+                                <p className="mt-1 truncate text-sm font-bold text-slate-900">{outcome.name}</p>
+                                <p className="mt-1 text-xs text-slate-500">{outcome.outputs.length} outputs · {activityCount} activities · {formatMoney(outcomeTotal(outcome))}</p>
+                              </button>
+                              {canManagePrograms && (
+                                <RowActionsMenu
+                                  onEdit={() => setNodeEditor({ mode: 'edit', kind: 'outcome', name: outcome.name, outcomeId: outcome.id })}
+                                  onRemove={() => removeOutcome(outcome.id)}
+                                />
+                              )}
+                              <ChevronRight className="size-4 shrink-0 text-slate-300" />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    <div className={clsx(
+                      'mt-6 flex flex-col gap-3 rounded-xl border px-4 py-3 sm:flex-row sm:items-center sm:justify-between',
+                      structureDirty ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-slate-50'
+                    )}>
+                      <div>
+                        <p className={clsx('text-sm font-bold', structureDirty ? 'text-amber-900' : 'text-slate-700')}>
+                          {structureDirty ? 'You have unsaved changes' : 'All plan changes are saved'}
+                        </p>
+                        <p className="mt-0.5 text-xs text-slate-500">
+                          {structureDirty ? 'Save before leaving this program.' : 'Edit or add an item to update this plan.'}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-primary shrink-0"
+                        onClick={handleSaveStructure}
+                        disabled={!structureDirty || savingStructure}
+                      >
+                        {savingStructure ? 'Saving changes…' : 'Save changes'}
+                      </button>
+                    </div>
+                  </div>
                 </>
               )}
             </section>
@@ -1157,10 +1113,77 @@ export const ProjectsPage = () => {
         )}
       </div>
 
+      <Dialog
+        open={Boolean(nodeEditor)}
+        onOpenChange={(open) => {
+          if (!open) setNodeEditor(null);
+        }}
+      >
+        <DialogContent className="max-w-md p-0">
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              handleSaveNodeName();
+            }}
+          >
+            <DialogHeader className="block border-b border-slate-100 py-4 pl-5 pr-14">
+              <DialogTitle className="text-base font-semibold capitalize text-slate-900">
+                {nodeEditor?.mode === 'create' ? 'Add' : 'Edit'} {nodeEditor?.kind}
+              </DialogTitle>
+              <DialogDescription className="mt-1 max-w-sm leading-5">
+                {nodeEditor?.mode === 'create'
+                  ? `Name this ${nodeEditor.kind} before adding it.`
+                  : 'Use a short, clear name that team members will recognize.'}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 p-5">
+              <div>
+                <label className="form-label capitalize text-slate-900" htmlFor="plan-node-name">
+                  {nodeEditor?.kind} name
+                </label>
+                <input
+                  id="plan-node-name"
+                  autoFocus
+                  required
+                  maxLength={160}
+                  className="input"
+                  value={nodeEditor?.name || ''}
+                  placeholder={`Enter ${nodeEditor?.kind || 'item'} name`}
+                  onChange={(event) =>
+                    setNodeEditor((current) =>
+                      current ? { ...current, name: event.target.value } : current
+                    )
+                  }
+                  onKeyDown={(event) => {
+                    if (event.key === 'Escape') setNodeEditor(null);
+                  }}
+                />
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <button type="button" className="btn btn-light" onClick={() => setNodeEditor(null)}>
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary capitalize"
+                  disabled={!nodeEditor?.name.trim()}
+                >
+                  {nodeEditor?.mode === 'create' ? `Add ${nodeEditor.kind}` : 'Save changes'}
+                </button>
+              </div>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="max-w-xl p-0">
           <DialogHeader className="px-5 py-4 border-b border-slate-100">
-            <DialogTitle className="text-base font-semibold text-slate-900">{editingProgramId ? 'Edit Program' : 'Create Program'}</DialogTitle>
+            <DialogTitle className="text-base font-semibold text-slate-900">
+              {editingProgramId ? 'Edit Program' : 'Create Program'}
+            </DialogTitle>
           </DialogHeader>
 
           <form className="p-5 space-y-4" onSubmit={handleCreateProgram}>
@@ -1199,22 +1222,34 @@ export const ProjectsPage = () => {
               {editingProgramId ? (
                 <input
                   className="input"
-                  value={programType === 'Admin' ? 'Admin (activities & budget lines only)' : 'Activity (full hierarchy)'}
+                  value={programType === 'Admin' ? 'Administrative program' : 'Standard program'}
                   readOnly
                   title="Program type is locked after creation."
                 />
               ) : (
                 <div className="flex flex-col gap-2 rounded-lg border border-slate-200 p-3">
                   <label className="flex items-start gap-2 text-sm text-slate-700">
-                    <input type="radio" name="programType" className="mt-1" checked={programType === 'Activity'} onChange={() => setProgramType('Activity')} />
+                    <input
+                      type="radio"
+                      name="programType"
+                      className="mt-1"
+                      checked={programType === 'Activity'}
+                      onChange={() => setProgramType('Activity')}
+                    />
                     <span>
-                      <span className="font-medium text-slate-900">Activity</span> — full outcome / output / activity / budget line hierarchy.
+                      <span className="font-medium text-slate-900">Standard program</span> — outcomes, outputs, activities, and budget items.
                     </span>
                   </label>
                   <label className="flex items-start gap-2 text-sm text-slate-700">
-                    <input type="radio" name="programType" className="mt-1" checked={programType === 'Admin'} onChange={() => setProgramType('Admin')} />
+                    <input
+                      type="radio"
+                      name="programType"
+                      className="mt-1"
+                      checked={programType === 'Admin'}
+                      onChange={() => setProgramType('Admin')}
+                    />
                     <span>
-                      <span className="font-medium text-slate-900">Admin</span> — activities and budget lines only, no outcomes/outputs.
+                      <span className="font-medium text-slate-900">Administrative program</span> — activities and budget items only.
                     </span>
                   </label>
                 </div>
@@ -1223,7 +1258,7 @@ export const ProjectsPage = () => {
 
             {!editingProgramId && (
               <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-800">
-                This creates the program first. The hierarchy is added from the selected program view.
+                After creating the program, you can build its plan from the program workspace.
               </div>
             )}
 
@@ -1250,8 +1285,10 @@ export const ProjectsPage = () => {
         <DialogContent className="sm:max-w-xl p-0 overflow-y-auto max-h-[90vh]">
           <div className="p-6 border-b bg-slate-50/50">
             <DialogHeader>
-              <DialogTitle className="text-2xl font-bold text-slate-900">Budget Line Input</DialogTitle>
-              <DialogDescription>Enter quantity, frequency, unit price, and units. The total is calculated automatically.</DialogDescription>
+              <DialogTitle className="text-2xl font-bold text-slate-900">Budget item</DialogTitle>
+              <DialogDescription>
+                Enter quantity, frequency, unit price, and units. The total is calculated automatically.
+              </DialogDescription>
             </DialogHeader>
           </div>
 
@@ -1259,12 +1296,12 @@ export const ProjectsPage = () => {
             {budgetDraft && (
               <>
                 <div>
-                  <label className="form-label text-slate-900">Budget Line Name</label>
+                  <label className="form-label text-slate-900">Item name</label>
                   <input
                     className="input"
                     value={budgetDraft.name}
-                    onChange={(event) => setBudgetDraft((current) => (current ? { ...current, name: event.target.value } : current))}
-                    placeholder="Budget line name"
+                    onChange={(event) => setBudgetDraft((current) => current ? { ...current, name: event.target.value } : current)}
+                    placeholder="Budget item name"
                   />
                 </div>
 
@@ -1277,7 +1314,7 @@ export const ProjectsPage = () => {
                       min={0}
                       step="any"
                       value={budgetDraft.quantity}
-                      onChange={(event) => setBudgetDraft((current) => (current ? { ...current, quantity: event.target.value } : current))}
+                      onChange={(event) => setBudgetDraft((current) => current ? { ...current, quantity: event.target.value } : current)}
                     />
                   </div>
                   <div>
@@ -1288,7 +1325,7 @@ export const ProjectsPage = () => {
                       min={0}
                       step="any"
                       value={budgetDraft.frequency}
-                      onChange={(event) => setBudgetDraft((current) => (current ? { ...current, frequency: event.target.value } : current))}
+                      onChange={(event) => setBudgetDraft((current) => current ? { ...current, frequency: event.target.value } : current)}
                     />
                   </div>
                   <div>
@@ -1299,7 +1336,7 @@ export const ProjectsPage = () => {
                       min={0}
                       step="any"
                       value={budgetDraft.unitPrice}
-                      onChange={(event) => setBudgetDraft((current) => (current ? { ...current, unitPrice: event.target.value } : current))}
+                      onChange={(event) => setBudgetDraft((current) => current ? { ...current, unitPrice: event.target.value } : current)}
                     />
                   </div>
                   <div>
@@ -1307,7 +1344,7 @@ export const ProjectsPage = () => {
                     <input
                       className="input"
                       value={budgetDraft.units}
-                      onChange={(event) => setBudgetDraft((current) => (current ? { ...current, units: event.target.value } : current))}
+                      onChange={(event) => setBudgetDraft((current) => current ? { ...current, units: event.target.value } : current)}
                     />
                   </div>
                 </div>
@@ -1322,7 +1359,7 @@ export const ProjectsPage = () => {
                     Cancel
                   </button>
                   <button type="button" className="btn btn-primary" onClick={handleSaveBudgetLine}>
-                    Save Budget Line
+                    Save budget item
                   </button>
                 </div>
               </>
@@ -1332,58 +1369,61 @@ export const ProjectsPage = () => {
       </Dialog>
 
       <Sheet open={budgetUploadSheetOpen} onOpenChange={setBudgetUploadSheetOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-[620px] h-full flex flex-col p-0">
-          <div className="p-6 border-b bg-slate-50/50">
+        <SheetContent side="right" className="flex h-full w-full flex-col p-0 sm:max-w-[620px]">
+          <div className="border-b bg-slate-50/50 p-6">
             <SheetHeader>
-              <SheetTitle>Import Budget from Excel</SheetTitle>
-              <SheetDescription>{selectedProgram ? `Upload a budget for "${selectedProgram.name}"` : 'Select a program first'}</SheetDescription>
+              <SheetTitle>Import budget</SheetTitle>
+              <SheetDescription>
+                {selectedProgram ? `Upload an Excel budget for “${selectedProgram.name}”.` : 'Select a program first.'}
+              </SheetDescription>
             </SheetHeader>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-6 space-y-4">
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-2">
-              <p className="text-sm font-medium text-slate-900">1. Download the template</p>
-              <p className="text-xs text-slate-500">Fill in the Outcome / Output / Activity / Cost type rows for this program's budget.</p>
-              <a href={`${URL_2}/templates/budget-upload-template.xlsx`} className="btn btn-sm btn-light gap-1.5 w-fit" download>
-                Download Budget Template
+          <div className="flex-1 space-y-4 overflow-y-auto p-6">
+            <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-sm font-semibold text-slate-900">1. Download the template</p>
+              <p className="text-xs text-slate-500">Add the outcomes, outputs, activities, and budget items for this program.</p>
+              <a href={`${URL_2}/templates/budget-upload-template.xlsx`} className="btn btn-sm btn-light w-fit" download>
+                Download template
               </a>
             </div>
 
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-2">
-              <p className="text-sm font-medium text-slate-900">2. Upload the completed file</p>
-              <p className="text-xs text-amber-700">This replaces this program's entire current budget with the uploaded file.</p>
-              <button type="button" className="btn btn-sm btn-primary gap-1.5 w-fit" onClick={handleUploadBudgetClick} disabled={uploadingBudget || !selectedProgram}>
+            <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-sm font-semibold text-slate-900">2. Upload the completed file</p>
+              <p className="text-xs text-amber-700">This replaces the program's current budget after you confirm.</p>
+              <button
+                type="button"
+                className="btn btn-sm btn-primary w-fit gap-1.5"
+                onClick={handleUploadBudgetClick}
+                disabled={uploadingBudget || !selectedProgram}
+              >
                 <Upload size={14} />
-                {uploadingBudget ? 'Uploading...' : 'Choose File & Upload'}
+                {uploadingBudget ? 'Uploading…' : 'Choose Excel file'}
               </button>
               <input ref={budgetFileInputRef} type="file" accept=".xlsx" className="hidden" onChange={handleBudgetFileSelected} />
             </div>
 
             {!!budgetUploadErrors.length && (
-              <div className="rounded-lg border border-rose-200 bg-rose-50 p-3">
+              <div className="rounded-xl border border-rose-200 bg-rose-50 p-4">
                 <div className="flex items-start justify-between gap-2">
-                  <p className="text-sm font-medium text-rose-700">
-                    The uploaded file has {budgetUploadErrors.length === 1 ? 'an error' : `${budgetUploadErrors.length} errors`} - nothing was saved:
+                  <p className="text-sm font-semibold text-rose-700">
+                    Fix {budgetUploadErrors.length === 1 ? 'this error' : `these ${budgetUploadErrors.length} errors`} before uploading again:
                   </p>
-                  <button type="button" className="btn btn-icon btn-xs btn-clear text-rose-500 shrink-0" onClick={() => setBudgetUploadErrors([])} aria-label="Dismiss">
+                  <button type="button" className="btn btn-icon btn-xs btn-clear shrink-0 text-rose-500" onClick={() => setBudgetUploadErrors([])} aria-label="Dismiss errors">
                     <X size={14} />
                   </button>
                 </div>
-                <ul className="mt-1.5 list-disc list-inside space-y-0.5 max-h-60 overflow-y-auto">
-                  {budgetUploadErrors.map((err, idx) => (
-                    <li key={idx} className="text-xs text-rose-600">
-                      {err}
-                    </li>
+                <ul className="mt-2 max-h-60 list-inside list-disc space-y-1 overflow-y-auto">
+                  {budgetUploadErrors.map((message, index) => (
+                    <li key={`${index}-${message}`} className="text-xs text-rose-600">{message}</li>
                   ))}
                 </ul>
               </div>
             )}
           </div>
 
-          <div className="flex justify-end gap-3 p-6 border-t">
-            <button type="button" className="btn btn-light" onClick={() => setBudgetUploadSheetOpen(false)}>
-              Close
-            </button>
+          <div className="flex justify-end border-t p-6">
+            <button type="button" className="btn btn-light" onClick={() => setBudgetUploadSheetOpen(false)}>Close</button>
           </div>
         </SheetContent>
       </Sheet>

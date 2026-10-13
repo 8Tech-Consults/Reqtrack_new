@@ -45,7 +45,7 @@ function emptyItem(): ItemDraft {
     proofOfPaymentExistingName: null,
     receiptExistingName: null,
   };
-} 
+}
 
 // Adjust this path to match wherever your backend actually serves accountability files.
 const existingFileUrl = (name: string) => `${URL_2}/accountability_docs/${name}`;

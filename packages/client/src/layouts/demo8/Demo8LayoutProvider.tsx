@@ -1,4 +1,12 @@
-import { createContext, type PropsWithChildren, useContext, useEffect, useState } from 'react';
+import {
+  createContext,
+  type Dispatch,
+  type PropsWithChildren,
+  type SetStateAction,
+  useContext,
+  useEffect,
+  useState
+} from 'react';
 import { MENU_MEGA, MENU_SIDEBAR } from '@/config';
 import { useMenus } from '@/providers';
 import { ILayoutConfig, useLayout } from '@/providers';
@@ -9,11 +17,21 @@ import { useLocation } from 'react-router';
 import { getPermissionsFromToken } from '@/utils/permissions';
 import { useAuthContext } from '@/auth/useAuthContext';
 
+export type Demo8PageAction = {
+  label: string;
+  onClick: () => void;
+  variant?: 'primary' | 'secondary';
+  icon?: 'plus' | 'download' | 'refresh';
+  disabled?: boolean;
+};
+
 // Interface defining the properties of the layout provider context
 export interface IDemo8LayoutProviderProps {
   layout: ILayoutConfig; // The layout configuration object
   mobileSidebarOpen: boolean; // Whether the mobile sidebar is open
   setMobileSidebarOpen: (open: boolean) => void; // Function to toggle the mobile sidebar
+  pageActions: Demo8PageAction[];
+  setPageActions: Dispatch<SetStateAction<Demo8PageAction[]>>;
 }
 
 // Initial layout provider properties, using Demo8 layout configuration as the default
@@ -22,7 +40,9 @@ const initalLayoutProps: IDemo8LayoutProviderProps = {
   mobileSidebarOpen: false, // Mobile sidebar is closed by default
   setMobileSidebarOpen: (open: boolean) => {
     console.log(`${open}`);
-  }
+  },
+  pageActions: [],
+  setPageActions: () => undefined
 };
 
 const filterMenuByPermissions = (
@@ -73,6 +93,7 @@ const Demo8LayoutProvider = ({ children }: PropsWithChildren) => {
   // Set the initial state for layout and mobile sidebar
   const [layout] = useState(layoutConfig); // Layout configuration is stored in state
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false); // Manage state for mobile sidebar
+  const [pageActions, setPageActions] = useState<Demo8PageAction[]>([]);
 
   
   const { auth } = useAuthContext();
@@ -97,7 +118,9 @@ const Demo8LayoutProvider = ({ children }: PropsWithChildren) => {
       value={{
         layout, // The current layout configuration
         mobileSidebarOpen, // Whether the mobile sidebar is currently open
-        setMobileSidebarOpen // Function to toggle the mobile sidebar state
+        setMobileSidebarOpen, // Function to toggle the mobile sidebar state
+        pageActions,
+        setPageActions
       }}
     >
       {children} {/* Render child components that consume this context */}

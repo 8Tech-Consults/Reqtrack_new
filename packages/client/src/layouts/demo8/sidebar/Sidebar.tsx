@@ -23,8 +23,7 @@ const Sidebar = () => {
   const [activeSection, setActiveSection] = useState<IMenuItemConfig | null>(null);
 
   const displayName =
-    currentUser?.fullname ||
-    [currentUser?.first_name, currentUser?.last_name].filter(Boolean).join(' ') ||
+    currentUser?.name ||
     currentUser?.username ||
     'Account';
 

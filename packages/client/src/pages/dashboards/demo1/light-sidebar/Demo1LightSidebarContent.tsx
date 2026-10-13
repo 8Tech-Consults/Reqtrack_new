@@ -22,7 +22,7 @@ const Demo1LightSidebarContent = () => {
         <DashboardSectionHeading id="overview-heading" title="Overview" />
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <ChannelStats />
-        </div> 
+        </div>
       </section>
 
       <section aria-labelledby="analytics-heading">

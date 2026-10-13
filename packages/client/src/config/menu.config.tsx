@@ -20,7 +20,7 @@ export const MENU_SIDEBAR: TMenuConfig = [
     path: '/dashboard'
   },
   {
-    title: 'Projects',
+    title: 'Programs',
     icon: 'questionnaire-tablet',
     path: '/projects',
     requiredPermissions: [getPerm("programs", "can_view_programs")]

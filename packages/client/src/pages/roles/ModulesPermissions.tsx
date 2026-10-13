@@ -102,7 +102,7 @@ const ModulesPermissions = ({ selectedRole }: { selectedRole: any }) => {
 
   if (!selectedRole) {
     return (
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 h-full flex">
+      <div className="flex min-h-72 h-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
         <div className="flex items-center justify-center h-full w-full">
           <div className="text-center">
             <Shield className="mx-auto h-12 w-12 text-gray-400" />
@@ -119,9 +119,9 @@ const ModulesPermissions = ({ selectedRole }: { selectedRole: any }) => {
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 h-full flex flex-col">
-      <div className="px-6 py-3 border-b border-gray-200 flex items-center justify-between">
-        <h2 className="text-base font-semibold text-gray-900">
+    <div className="flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+      <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+        <h2 className="text-base font-bold tracking-[-0.01em] text-[#172550] sm:text-lg">
           {selectedRole.name} - Permissions
         </h2>
       </div>

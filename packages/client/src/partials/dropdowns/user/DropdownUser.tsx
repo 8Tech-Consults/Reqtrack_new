@@ -1,4 +1,4 @@
-import { Fragment } from 'react';
+import { type ChangeEvent, Fragment } from 'react';
 import { Link } from 'react-router-dom';
 import { FormattedMessage } from 'react-intl';
 import { useAuthContext } from '@/auth';
@@ -26,8 +26,7 @@ const DropdownUser = ({ menuItemRef }: IDropdownUserProps) => {
   const { isRTL } = useLanguage();
 
   const displayName =
-    currentUser?.fullname ||
-    [currentUser?.first_name, currentUser?.last_name].filter(Boolean).join(' ') ||
+    currentUser?.name ||
     currentUser?.username ||
     'Account';
   const initials = displayName
