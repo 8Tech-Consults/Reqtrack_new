@@ -87,7 +87,7 @@ export function AccountabilityDetail({ id, requestedAmount, onBack, onEdit, file
     { id: string }
   >(ACCOUNTABILITY_QUERY, { variables: { id } });
 
-  const { auth } = useAuthContext();
+  const { auth, currentUser } = useAuthContext();
   const permissions = getPermissionsFromToken(auth?.access_token);
   const canReviewAccountability = Boolean(permissions.can_review_accountability);
 
@@ -110,6 +110,10 @@ export function AccountabilityDetail({ id, requestedAmount, onBack, onEdit, file
     },
   });
 
+  const submitForReview = (current: AccountabilityStatus) => {
+    updateStatus({ variables: { id, status: current === 'Amend' ? 'Amended' : 'Pending' } });
+  };
+
   const confirmReview = () => {
     if (!pendingAction) return;
     updateStatus({ variables: { id, status: pendingAction, notes: reviewNotes.trim() || undefined } });
@@ -126,10 +130,10 @@ export function AccountabilityDetail({ id, requestedAmount, onBack, onEdit, file
   const a = data?.accountability;
   if (!a) return <p className="text-sm text-slate-400">Not found.</p>;
 
-  const isEditable = a.status === 'Draft' || a.status === 'Rejected' || a.status === 'Amend';
-  const canSubmit = !canReviewAccountability && a.status == 'Draft';
-  const canReview = canReviewAccountability && a.status !== 'Draft' && a.status !== 'Closed';
-  console.log('AccountabilityDetail: canReviewAccountability', canReviewAccountability, 'canReview', canReview, 'status', a.status);
+  const isOwner = currentUser?.id != null && String(currentUser.id) === String(a.reportedBy.id);
+  const isEditable = isOwner && (a.status === 'Draft' || a.status === 'Amend');
+  const canSubmit = isEditable;
+  const canReview = canReviewAccountability && (a.status === 'Pending' || a.status === 'Amended');
 
   return (
     <div className="space-y-6">
@@ -224,20 +228,16 @@ export function AccountabilityDetail({ id, requestedAmount, onBack, onEdit, file
         <div className="flex justify-end gap-2">
           <button
             type="button"
-            onClick={confirmReview}
-            disabled={updatingStatus || (pendingAction === 'Amend' && !reviewNotes.trim())}
-            className={`rounded-lg px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50 ${
-              pendingAction === 'Amend' ? 'bg-amber-600 hover:bg-amber-700' : 'bg-green-600 hover:bg-green-700'
-            }`}
+            onClick={() => submitForReview(a.status)}
+            disabled={updatingStatus}
+            className="rounded-lg bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
           >
-            {updatingStatus ? 'Submitting...' : `Submit Accountability `}
+            {updatingStatus ? 'Submitting...' : a.status === 'Amend' ? 'Resubmit Accountability' : 'Submit Accountability'}
           </button>
         </div>
-      ) 
+      )}
 
-      } 
-
-       {canReview && (
+      {canReview && (
         <div className="rounded-lg border border-slate-200 p-4 space-y-3">
           <h3 className="text-sm font-semibold text-slate-900">Review</h3>
 

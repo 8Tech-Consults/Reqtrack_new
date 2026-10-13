@@ -113,6 +113,16 @@ const staffResolvers = {
                 let userId = user_id;
 
                 if (!userId) {
+                    const [[duplicate]] = await connection.execute(
+                        `SELECT id FROM users WHERE email = ? OR username = ? LIMIT 1`,
+                        [normalizedEmail, normalizedEmail]
+                    );
+                    if (duplicate) {
+                        throw new GraphQLError("A user with this email address already exists.", {
+                            extensions: { code: "BAD_USER_INPUT" },
+                        });
+                    }
+
                     // New staff member: create their user account first with the default password.
                     const salt = await bcrypt.genSalt();
                     const hashedPwd = await bcrypt.hash(DEFAULT_STAFF_PASSWORD, salt);
@@ -125,6 +135,8 @@ const staffResolvers = {
                             username: normalizedEmail,
                             name,
                             email: normalizedEmail,
+                            // users.phone_number is NOT NULL on some databases.
+                            phone_number: String(telephone || "").trim(),
                             password: hashedPwd,
                             role_id: role.id,
                             created_at: new Date(),
@@ -138,6 +150,7 @@ const staffResolvers = {
                         table: "users",
                         data: {
                             name,
+                            phone_number: String(telephone || "").trim(),
                             role_id: role.id,
                             updated_at: new Date(),
                         },

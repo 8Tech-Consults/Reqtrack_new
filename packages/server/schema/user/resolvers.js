@@ -252,8 +252,6 @@ export const getUsersCount = async ({
   }
 };
 
-
-
 const userResolvers = {
   Date: GraphQLDate,
   Upload: GraphQLUpload,
@@ -443,12 +441,16 @@ const userResolvers = {
       let imageId;
 
       try {
-        // const userPermissions = context?.req?.user?.permissions;
-        // ensureAnyPermission(
-        //   userPermissions,
-        //   ["can_manage_users", "can_create_users"],
-        //   "You dont have permissions to manage users"
-        // );
+        // Managing other accounts needs a permission; anyone may update their
+        // own profile, but not their own role or status.
+        const actor = context?.req?.user;
+        const canManageUsers = ["can_manage_users", "can_create_users", "can_manage_staff"].some(
+          (key) => hasPermission(actor?.permissions, key)
+        );
+        const isSelfUpdate = isUpdate && actor?.id != null && String(actor.id) === String(id);
+        if (!canManageUsers && !isSelfUpdate) {
+          throw new GraphQLError("You dont have permissions to manage users");
+        }
 
         await ensureUserStatusColumn();
 
@@ -561,14 +563,23 @@ const userResolvers = {
           name: normalizedName,
           //staff_number: normalizedCompanyInitials,
           // premises_location: normalizedPremisesLocation,
-          // phone_number: normalizedPhoneNumber,
           district: normalizedDistrict,
           role_id: resolvedRoleId,
           updated_at: new Date(),
         };
 
+        // users.phone_number is NOT NULL on some databases, so always supply it on create.
+        if (normalizedPhoneNumber || !isUpdate) {
+          data.phone_number = normalizedPhoneNumber || "";
+        }
+
         if (status !== undefined) {
           data.status = status;
+        }
+
+        if (!canManageUsers) {
+          delete data.role_id;
+          delete data.status;
         }
 
         if (image) {

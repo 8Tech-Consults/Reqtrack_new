@@ -28,6 +28,7 @@ query RequisitionStatusChart {
     rejectedCount
     amendedCount
     acceptedCount
+    closedCount
   }
 }
 `;

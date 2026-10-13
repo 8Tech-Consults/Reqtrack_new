@@ -8,6 +8,7 @@ interface RequisitionStatusChart {
   rejectedCount: number;
   requireAmendmentCount: number;
   amendedCount: number;
+  closedCount?: number;
 }
 
 interface DashboardStatusChartProps {
@@ -18,11 +19,12 @@ interface DashboardStatusChartProps {
 
 const statusConfig = [
   { key: 'pendingCount', name: 'Pending', color: '#e8ae32' },
-  { key: 'acceptedCount', name: 'Accepted', color: '#2aaed3' },
-  { key: 'approvedCount', name: 'Approved', color: '#3aa76d' },
+  { key: 'acceptedCount', name: 'Approved', color: '#2aaed3' },
+  { key: 'approvedCount', name: 'Authorized', color: '#3aa76d' },
   { key: 'rejectedCount', name: 'Rejected', color: '#df5b65' },
   { key: 'requireAmendmentCount', name: 'Needs amendment', color: '#7357d9' },
-  { key: 'amendedCount', name: 'Amended', color: '#7d8ca5' }
+  { key: 'amendedCount', name: 'Amended', color: '#7d8ca5' },
+  { key: 'closedCount', name: 'Closed', color: '#475569' }
 ] as const;
 
 const DashboardStatusChart = ({ data, loading, error }: DashboardStatusChartProps) => {

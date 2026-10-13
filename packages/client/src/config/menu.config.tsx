@@ -22,12 +22,14 @@ export const MENU_SIDEBAR: TMenuConfig = [
   {
     title: 'Projects',
     icon: 'questionnaire-tablet',
-    path: '/projects'
+    path: '/projects',
+    requiredPermissions: [getPerm("programs", "can_view_programs")]
   },
   {
     title: 'Requisitions',
     icon: 'note-2',
-    path: '/requisitions'
+    path: '/requisitions',
+    requiredPermissions: [getPerm("requisitions", "can_view_requisitions")]
   },
   {
     title: 'Staff',

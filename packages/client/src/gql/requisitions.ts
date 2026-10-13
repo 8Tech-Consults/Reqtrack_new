@@ -16,6 +16,14 @@ export const GET_REQUISITIONS = gql`
     status
     rejectionReason
     reason
+    history {
+      action
+      at
+      reason
+      byId
+      byName
+      bySignature
+    }
     totalRequestedAmount
     createdAt
     items {
@@ -33,8 +41,10 @@ export const GET_REQUISITIONS = gql`
       id
       email
       name
+      phone_number
       staffDetails {
         signature
+        telephone
       }
     }
     program {
@@ -57,6 +67,12 @@ export const GET_REQUISITIONS = gql`
 }
 `;
 
+export const GET_REQUISITIONS_COUNT = gql`
+  query RequisitionsCount($search: String) {
+    requisitionsCount(search: $search)
+  }
+`;
+
 export const GET_REQUISITION = gql`
   query Requisition($id: ID!) {
     requisition(id: $id) {
@@ -73,6 +89,14 @@ export const GET_REQUISITION = gql`
       status
       rejectionReason
       reason
+      history {
+        action
+        at
+        reason
+        byId
+        byName
+        bySignature
+      }
       totalRequestedAmount
       createdAt
       items {
@@ -90,8 +114,10 @@ export const GET_REQUISITION = gql`
         id
         email
         name
+        phone_number
         staffDetails {
           signature
+          telephone
         }
       }
       program {
@@ -216,6 +242,15 @@ export const UPDATE_REQUISITION_STATUS = gql`
       id
       status
       rejectionReason
+      reason
+      history {
+        action
+        at
+        reason
+        byId
+        byName
+        bySignature
+      }
     }
   }
 `;

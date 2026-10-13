@@ -18,6 +18,7 @@ import { useApolloClient, useLazyQuery, useMutation, useQuery } from '@apollo/cl
 import { useSearchParams } from 'react-router-dom';
 import {
   GET_REQUISITIONS,
+  GET_REQUISITIONS_COUNT,
   GET_REQUISITION,
   SAVE_REQUISITION,
   DELETE_REQUISITION,
@@ -27,6 +28,7 @@ import { toast } from 'sonner';
 import { RequisitionFormSheet } from '../sheets/RequisitionFormSheet';
 import { RequisitionDetailSheet } from '../sheets/RequisitionDetailSheet';
 import { toFriendlyErrorMessage } from '@/utils';
+import { useAuthContext } from '@/auth';
 
 export const formatMoney = (value: number) =>
   new Intl.NumberFormat('en-UG', {
@@ -35,9 +37,41 @@ export const formatMoney = (value: number) =>
     maximumFractionDigits: 0,
   }).format(value || 0);
 
+// Stored status -> the wording shown to people: the first approval reads
+// "Approved" and the final sign-off "Authorized".
+const STATUS_LABELS: Record<string, string> = {
+  Accepted: 'Approved',
+  Approved: 'Authorized',
+};
+
+export const requisitionStatusLabel = (status?: string | null) =>
+  status ? STATUS_LABELS[status] ?? status : '';
+
+// Dates arrive as ISO strings; older responses used epoch milliseconds.
+export const formatDateTime = (value?: string | null, withTime = true) => {
+  if (!value) return '—';
+  const date = /^\d+$/.test(value) ? new Date(Number(value)) : new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return withTime
+    ? date.toLocaleString('en-UG', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    : date.toLocaleDateString('en-UG', { day: '2-digit', month: 'short', year: 'numeric' });
+};
+
+// Statuses in which the requester / a reviewer may still edit (mirrors the server).
+const OWNER_EDITABLE_STATUSES = ['Pending', 'Amendment Requested'];
+const REVIEWER_EDITABLE_STATUSES = ['Pending', 'Amended'];
+
+export type RequisitionHistoryEntry = {
+  action: string;
+  at?: string | null;
+  reason?: string | null;
+  byId?: string | null;
+  byName?: string | null;
+  bySignature?: string | null;
+};
+
 export type RequisitionStatus =
   | 'Draft'
-  | 'Pending'
   | 'Pending'
   | 'Accepted'
   | 'Approved'
@@ -68,7 +102,8 @@ export type RequisitionRecord = {
     id: string;
     email: string;
     name: string;
-    staffDetails?: { signature?: string | null } | null;
+    phone_number?: string | null;
+    staffDetails?: { signature?: string | null; telephone?: string | null } | null;
   };
   title: string;
   purpose?: string | null;
@@ -76,6 +111,7 @@ export type RequisitionRecord = {
   conceptNoteName?: string | null;
   rejectionReason?: string | null;
   reason?: string | null;
+  history?: RequisitionHistoryEntry[] | null;
   status: RequisitionStatus | string;
   totalRequestedAmount: number;
   createdAt: string;
@@ -107,12 +143,26 @@ const RequisitionsList = ({
   const [saving, setSaving] = useState(false);
   const pageSize = 10;
 
+  const apollo = useApolloClient();
+  const { currentUser } = useAuthContext();
+  const currentUserId = currentUser?.id != null ? String(currentUser.id) : null;
+  const isOwnRequisition = useCallback(
+    (row: RequisitionRecord) => currentUserId != null && String(row.requestedBy?.id) === currentUserId,
+    [currentUserId]
+  );
+  const isEditable = useCallback(
+    (row: RequisitionRecord) =>
+      (isOwnRequisition(row) ? OWNER_EDITABLE_STATUSES : REVIEWER_EDITABLE_STATUSES).includes(row.status),
+    [isOwnRequisition]
+  );
+
   const statusBadge: Record<string, string> = {
     Pending: 'border-slate-200 bg-slate-50 text-slate-700',
     Accepted: 'border-blue-200 bg-blue-50 text-blue-700',
     Approved: 'border-green-200 bg-green-50 text-green-700',
     Rejected: 'border-rose-200 bg-rose-50 text-rose-700',
     'Amendment Requested': 'border-amber-200 bg-amber-50 text-amber-700',
+    Amended: 'border-amber-200 bg-amber-50 text-amber-700',
     Closed: 'border-slate-300 bg-slate-200 text-slate-700',
   };
 
@@ -196,12 +246,14 @@ const RequisitionsList = ({
           payload.conceptNote = values.conceptNote;
         }
 
-        await saveRequisition({ variables: { input: payload } });
+        const result: any = await saveRequisition({ variables: { input: payload } });
 
         setRefreshKey((prev) => prev + 1);
         setEditOpen(false);
         if (onCreateOpenChange) onCreateOpenChange(false);
-        toast.success(`Requisition ${id ? 'updated' : 'created'} successfully!`);
+        toast.success(
+          result?.data?.createRequisition?.message || `Requisition ${id ? 'updated' : 'created'} successfully!`
+        );
       } catch (error: any) {
         toast.error(toFriendlyErrorMessage(error, 'Unable to save this requisition. Please try again.'));
       } finally {
@@ -217,11 +269,18 @@ const RequisitionsList = ({
   const fetchRequisitionsPage = useCallback(
     async ({ pageIndex, pageSize: gridPageSize }: TDataGridRequestParams) => {
       try {
-        const { data } = await refetch({
-          limit: gridPageSize,
-          offset: pageIndex * gridPageSize,
-          search: debouncedSearch || undefined,
-        });
+        const [{ data }, countResult] = await Promise.all([
+          refetch({
+            limit: gridPageSize,
+            offset: pageIndex * gridPageSize,
+            search: debouncedSearch || undefined,
+          }),
+          apollo.query<{ requisitionsCount: number }>({
+            query: GET_REQUISITIONS_COUNT,
+            variables: { search: debouncedSearch || undefined },
+            fetchPolicy: 'network-only',
+          }),
+        ]);
 
         const items = data?.requisitions || [];
         setCurrentPageData(items);
@@ -229,7 +288,7 @@ const RequisitionsList = ({
 
         return {
           data: items,
-          totalCount: pageIndex * gridPageSize + items.length + (items.length === gridPageSize ? 1 : 0),
+          totalCount: countResult.data?.requisitionsCount ?? items.length,
         };
       } catch (error: any) {
         setCurrentPageData([]);
@@ -241,7 +300,7 @@ const RequisitionsList = ({
         };
       }
     },
-    [refetch, debouncedSearch]
+    [refetch, apollo, debouncedSearch]
   );
 
   // ... deleteRequisition, updateStatus, handleStatusChange, handleExport unchanged ...
@@ -264,13 +323,16 @@ const RequisitionsList = ({
     [deleteRequisition]
   );
 
-  const [updateStatus, { loading: updatingStatus }] = useMutation(UPDATE_REQUISITION_STATUS, {
-    onCompleted: (_, context) => {
+  const [updateStatus, { loading: updatingStatus }] = useMutation<{
+    updateRequisitionStatus: Pick<RequisitionRecord, 'id' | 'status' | 'reason' | 'history'>;
+  }>(UPDATE_REQUISITION_STATUS, {
+    onCompleted: (result) => {
       toast.success('Requisition status updated');
       setRefreshKey((prev) => prev + 1);
-      const updatedId = context?.variables?.id;
-      if (updatedId && detailRow?.id === updatedId) {
-        setDetailOpen(false);
+      // Keep the sheet open and show the new status and history entry in place.
+      const updated = result?.updateRequisitionStatus;
+      if (updated) {
+        setDetailRow((prev) => (prev && prev.id === updated.id ? { ...prev, ...updated } : prev));
       }
     },
     onError: (err) => {
@@ -291,16 +353,16 @@ const RequisitionsList = ({
       return;
     }
     const rows: RequisitionRecord[] = currentPageData;
-    const headers = ['Requisition No', 'Program', 'Status', 'Requested By', 'Total Amount', 'Created'];
+    const headers = ['Requisition No', 'Program', 'Status', 'Requested By', 'Total Amount', 'Submitted'];
 
     const csvLines = rows.map((row) => {
       const cells = [
         row.requisitionNo || '',
         row.program?.name || '',
-        row.status || '',
+        requisitionStatusLabel(row.status),
         row.requestedBy?.name || '',
         String(row.totalRequestedAmount ?? ''),
-        row.createdAt || '',
+        formatDateTime(row.createdAt),
       ];
       return cells.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',');
     });
@@ -384,11 +446,18 @@ const RequisitionsList = ({
         ),
       },
       {
+        accessorKey: 'createdAt',
+        header: ({ column }) => <DataGridColumnHeader title="Submitted" column={column} />,
+        cell: ({ row }) => (
+          <span className="text-sm text-gray-700 whitespace-nowrap">{formatDateTime(row.original.createdAt)}</span>
+        ),
+      },
+      {
         accessorKey: 'status',
         header: ({ column }) => <DataGridColumnHeader title="Status" column={column} />,
         cell: ({ row }) => (
-          <span className={`badge badge-outline ${statusBadge[row.original.status] }`}>
-                 {row.original.status}
+          <span className={`badge badge-outline ${statusBadge[row.original.status] ?? statusBadge.Pending}`}>
+            {requisitionStatusLabel(row.original.status)}
           </span>
         ),
       },
@@ -423,7 +492,7 @@ const RequisitionsList = ({
                   </MenuLink>
                 </MenuItem>
 
-                {canEdit && row.original.status === 'Pending' && (
+                {canEdit && isEditable(row.original) && (
                   <>
                     <MenuItem
                       onClick={() => {
@@ -439,6 +508,8 @@ const RequisitionsList = ({
                       </MenuLink>
                     </MenuItem>
 
+                    {OWNER_EDITABLE_STATUSES.includes(row.original.status) && (
+                    <>
                     <MenuSeparator />
 
                     <MenuItem
@@ -455,6 +526,8 @@ const RequisitionsList = ({
                         <MenuTitle>{deleting ? 'Deleting...' : 'Delete'}</MenuTitle>
                       </MenuLink>
                     </MenuItem>
+                    </>
+                    )}
                   </>
                 )}
               </MenuSub>
@@ -463,7 +536,7 @@ const RequisitionsList = ({
         ),
       },
     ],
-    [handleDelete, deleting, canEdit]
+    [handleDelete, deleting, canEdit, isEditable]
   );
 
   return (
@@ -525,6 +598,11 @@ const RequisitionsList = ({
         canEdit={canEdit}
         updatingStatus={updatingStatus}
         onStatusChange={handleStatusChange}
+        onEdit={(row) => {
+          setDetailOpen(false);
+          setEditRow(row);
+          setEditOpen(true);
+        }}
       />
     </div>
   );

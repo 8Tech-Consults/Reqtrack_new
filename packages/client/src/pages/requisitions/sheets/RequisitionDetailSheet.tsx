@@ -2,12 +2,17 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { FileText, Info, ListChecks, Clock, Printer, Receipt, ArrowRight } from 'lucide-react';
-import { formatMoney, RequisitionRecord, RequisitionStatus } from '../blocks/RequisitionsList';
+import {
+  formatDateTime,
+  formatMoney,
+  requisitionStatusLabel,
+  RequisitionRecord,
+  RequisitionStatus,
+} from '../blocks/RequisitionsList';
 import { URL_2 } from '@/config/urls';
 import { useAuthContext } from '@/auth';
 import { getPermissionsFromToken } from '@/utils/permissions';
 import { toAbsoluteUrl } from '@/utils';
-import { LOAD_USERS } from '@/gql/queries';
 import { GET_ACCOUNTABILITIES } from '@/gql/accountabilities';
 import type { Accountability, AccountabilitiesVars } from '@/pages/accountabilities/accountability';
 import { useQuery} from '@apollo/client/react';
@@ -19,14 +24,20 @@ type Props = {
   canEdit?: boolean;
   updatingStatus?: boolean;
   onStatusChange?: (id: string, status: RequisitionStatus, reason?: string) => void;
+  onEdit?: (row: RequisitionRecord) => void;
 };
 
-type RequisitionUser = {
-  id: string;
-  name: string;
-  email?: string;
-  staffDetails?: { signature?: string | null; role_name?: string | null } | null;
+// History entries store the status that was set; show them in everyday wording.
+const HISTORY_LABELS: Record<string, string> = {
+  Submitted: 'Submitted',
+  Accepted: 'Approved',
+  Approved: 'Authorized',
+  Rejected: 'Rejected',
+  'Amendment Requested': 'Amendment requested',
+  Amended: 'Amended and resubmitted',
+  Adjusted: 'Adjusted',
 };
+const historyLabel = (action: string) => HISTORY_LABELS[action] ?? action;
 
 const statusBadge: Record<string, string> = {
   Pending: 'border-slate-200 bg-slate-50 text-slate-700',
@@ -34,24 +45,18 @@ const statusBadge: Record<string, string> = {
   Approved: 'border-green-200 bg-green-50 text-green-700',
   Rejected: 'border-rose-200 bg-rose-50 text-rose-700',
   'Amendment Requested': 'border-amber-200 bg-amber-50 text-amber-700',
+  Amended: 'border-amber-200 bg-amber-50 text-amber-700',
   Closed: 'border-slate-300 bg-slate-200 text-slate-700',
 };
 
-const RequisitionDetailSheet = ({ open, onOpenChange, detailRow, canEdit, updatingStatus, onStatusChange }: Props) => {
+const RequisitionDetailSheet = ({ open, onOpenChange, detailRow, canEdit, updatingStatus, onStatusChange, onEdit }: Props) => {
   const navigate = useNavigate();
   const [reasonText, setReasonText] = useState('');
   const [pendingAction, setPendingAction] = useState<RequisitionStatus | null>(null);
 
   const needsReason = pendingAction === 'Rejected' || pendingAction === ('Amendment Requested' as RequisitionStatus);
 
-  const { auth } = useAuthContext();
-  const { data, loading: usersLoading, error: usersError } = useQuery<{
-    users: RequisitionUser[];
-  }>(LOAD_USERS, {
-    fetchPolicy: "network-only",
-  });
-
-  const users =data?.users;
+  const { auth, currentUser } = useAuthContext();
 
   const perms = getPermissionsFromToken(auth?.access_token);
 
@@ -94,27 +99,22 @@ const RequisitionDetailSheet = ({ open, onOpenChange, detailRow, canEdit, updati
     setPendingAction(null);
   };
 
+  const requesterPhone =
+    detailRow?.requestedBy?.staffDetails?.telephone || detailRow?.requestedBy?.phone_number || '';
+
   const handlePrint = () => {
-    let log: { action: string; reason?: string; by?: string; at?: string }[] = [];
-    try { log = detailRow?.reason ? JSON.parse(detailRow.reason) : []; } catch { log = []; }
-    
-    // Build a lookup so we can resolve "by" (a user id) to a name/signature.
-    // Swap `staffList` for whatever array of users/staff you already have loaded.
-    const userMap = new Map(
-      (users ?? []).map((u) => [u.id, u])
-    );
-    const resolveUser = (id?: string) => (id ? userMap.get(id) : undefined);
+    const log = detailRow?.history ?? [];
+    const lastEntry = (action: string) => log.filter((e) => e.action === action).pop();
 
-    const approvedEntry = log.filter((e) => e.action === 'Approved').pop();
-    const rejectedEntry = log.filter((e) => e.action === 'Rejected').pop();
-    const acceptedEntry = log.filter((e) => e.action === 'Accepted').pop();
+    const approvedEntry = lastEntry('Approved');
+    const rejectedEntry = lastEntry('Rejected');
+    const acceptedEntry = lastEntry('Accepted');
 
-    const approvedUser = resolveUser(approvedEntry?.by);
-    const rejectedUser = resolveUser(rejectedEntry?.by);
-    const acceptedUser = resolveUser(acceptedEntry?.by);
-
-    // const approvedEntry = log.filter((e) => e.action === 'Approved').pop();
-    // const rejectedEntry = log.filter((e) => e.action === 'Rejected').pop();
+    const signatureImg = (signature?: string | null) =>
+      signature
+        ? `<img src="${URL_2}/staff/${signature}" alt="Signature" style="height:36px;max-width:140px;object-fit:contain;margin-bottom:4px" />`
+        : `<div style="height:36px;border-bottom:1px solid #cbd5e1;margin-bottom:4px"></div>`;
+    const finalEntry = approvedEntry ?? rejectedEntry;
 
     const currency = (n: number) =>
       new Intl.NumberFormat('en-UG', { style: 'currency', currency: 'UGX', maximumFractionDigits: 0 }).format(n);
@@ -131,10 +131,10 @@ const RequisitionDetailSheet = ({ open, onOpenChange, detailRow, canEdit, updati
 
     const historyHtml = log.length ? log.map(e => `
       <tr>
-        <td><span class="status-dot status-${e.action.toLowerCase()}"></span>${e.action}</td>
-        <td>${e.by ?? '—'}</td>
+        <td><span class="status-dot status-${e.action.toLowerCase()}"></span>${historyLabel(e.action)}</td>
+        <td>${e.byName ?? '—'}</td>
         <td>${e.reason ?? '—'}</td>
-        <td>${e.at ? new Date(e.at).toLocaleString('en-UG', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}</td>
+        <td>${formatDateTime(e.at)}</td>
       </tr>`).join('') : '';
 
     const totalFormatted = currency(detailRow?.totalRequestedAmount ?? 0);
@@ -207,7 +207,7 @@ const RequisitionDetailSheet = ({ open, onOpenChange, detailRow, canEdit, updati
         ${logoUrl ? `<img src="${logoUrl}" alt="Organization logo" />` : ''}
         <div class="org-name">Norwegian Association for Disabled Uganda</div>
         <div class="org-sub">Requisition & Accountability System</div>
-        <span class="badge ${statusClass}">${detailRow?.status ?? ''}</span>
+        <span class="badge ${statusClass}">${requisitionStatusLabel(detailRow?.status)}</span>
       </div>
 
       <div class="header">
@@ -221,8 +221,8 @@ const RequisitionDetailSheet = ({ open, onOpenChange, detailRow, canEdit, updati
       <div class="grid">
         <div class="field"><label>Program</label><span>${detailRow?.program?.name ?? '—'}</span></div>
         <div class="field"><label>Activity</label><span>${detailRow?.activity?.name ?? '—'}</span></div>
-        <div class="field"><label>Requested By</label><span>${detailRow?.requestedBy?.name ?? '—'}</span><div style="font-size:10px;color:#94a3b8">${detailRow?.requestedBy?.email ?? ''}</div></div>
-        <div class="field"><label>Date Created</label><span>${detailRow?.createdAt ? new Date(detailRow.createdAt).toLocaleDateString('en-UG', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</span></div>
+        <div class="field"><label>Requested By</label><span>${detailRow?.requestedBy?.name ?? '—'}</span><div style="font-size:10px;color:#94a3b8">${[detailRow?.requestedBy?.email, requesterPhone].filter(Boolean).join(' · ')}</div></div>
+        <div class="field"><label>Date Submitted</label><span>${formatDateTime(detailRow?.createdAt)}</span></div>
         <div class="field full"><label>Purpose / Description</label><span>${detailRow?.purpose ?? '—'}</span></div>
       </div>
 
@@ -238,31 +238,22 @@ const RequisitionDetailSheet = ({ open, onOpenChange, detailRow, canEdit, updati
       <h2>Signatures</h2>
       <div class="signatures">
         <div>
-          ${detailRow?.requestedBy?.staffDetails?.signature
-            ? `<img src="${URL_2}/staff/${detailRow.requestedBy.staffDetails.signature}" alt="Signature" style="height:36px;max-width:140px;object-fit:contain;margin-bottom:4px" />`
-            : `<div style="height:36px;border-bottom:1px solid #cbd5e1;margin-bottom:4px"></div>`
-          }
+          ${signatureImg(detailRow?.requestedBy?.staffDetails?.signature)}
           <div class="name">${detailRow?.requestedBy?.name ?? '___________________'}</div>
           <div class="role">Requested By</div>
-          <div style="margin-top:6px;font-size:10px;color:#64748b">Date: _______________</div>
+          <div style="margin-top:6px;font-size:10px;color:#64748b">Date: ${detailRow?.createdAt ? formatDateTime(detailRow.createdAt, false) : '_______________'}</div>
         </div>
         <div >
-          ${acceptedUser?.staffDetails?.signature
-            ? `<img src="${URL_2}/staff/${acceptedUser.staffDetails.signature}" alt="Signature" style="height:36px;max-width:140px;object-fit:contain;margin-bottom:4px" />`
-            : `<div style="height:36px;border-bottom:1px solid #cbd5e1;margin-bottom:4px"></div>`
-          }
-          <div class="name">${acceptedUser?.name ?? '___________________'}</div>
-          <div class="role">Reviewed By</div>
-          <div style="margin-top:6px;font-size:10px;color:#64748b">Date: ${acceptedEntry?.at ? new Date(acceptedEntry.at).toLocaleDateString('en-UG', { day: '2-digit', month: 'short', year: 'numeric' }) : '_______________'}</div>
+          ${signatureImg(acceptedEntry?.bySignature)}
+          <div class="name">${acceptedEntry?.byName ?? '___________________'}</div>
+          <div class="role">Approved By</div>
+          <div style="margin-top:6px;font-size:10px;color:#64748b">Date: ${acceptedEntry?.at ? formatDateTime(acceptedEntry.at, false) : '_______________'}</div>
         </div>
         <div >
-          ${approvedUser?.staffDetails?.signature
-            ? `<img src="${URL_2}/staff/${approvedUser.staffDetails.signature}" alt="Signature" style="height:36px;max-width:140px;object-fit:contain;margin-bottom:4px" />`
-            : `<div style="height:36px;border-bottom:1px solid #cbd5e1;margin-bottom:4px"></div>`
-          }
-          <div class="name">${approvedUser?.name ?? (rejectedEntry ? rejectedUser?.name ?? '___________________' : '___________________')}</div>
-          <div class="role">${rejectedEntry && !approvedEntry ? 'Rejected By' : 'Approved By'}</div>
-          <div style="margin-top:6px;font-size:10px;color:#64748b">Date: ${approvedEntry?.at ? new Date(approvedEntry.at).toLocaleDateString('en-UG', { day: '2-digit', month: 'short', year: 'numeric' }) : rejectedEntry?.at ? new Date(rejectedEntry.at).toLocaleDateString('en-UG', { day: '2-digit', month: 'short', year: 'numeric' }) : '_______________'}</div>
+          ${signatureImg(finalEntry?.bySignature)}
+          <div class="name">${finalEntry?.byName ?? '___________________'}</div>
+          <div class="role">${rejectedEntry && !approvedEntry ? 'Rejected By' : 'Authorized By'}</div>
+          <div style="margin-top:6px;font-size:10px;color:#64748b">Date: ${finalEntry?.at ? formatDateTime(finalEntry.at, false) : '_______________'}</div>
         </div>
       </div>
 
@@ -293,6 +284,23 @@ const RequisitionDetailSheet = ({ open, onOpenChange, detailRow, canEdit, updati
     );
   }
 
+  const history = detailRow.history ?? [];
+  // Which decision is due depends on where the requisition is, not on which
+  // permissions the viewer happens to hold.
+  const isFinalReview = detailRow.status === 'Accepted';
+  const isFirstReview = ['Pending', 'Amended'].includes(detailRow.status);
+  const canDecide =
+    (isFirstReview && canAcceptRequisitions) || (isFinalReview && canApproveRequisitions);
+  const approveStatus: RequisitionStatus = isFinalReview ? 'Approved' : 'Accepted';
+  const approveLabel = isFinalReview ? 'Authorize' : 'Approve';
+
+  const isOwner =
+    currentUser?.id != null && String(currentUser.id) === String(detailRow.requestedBy?.id);
+  const amendmentRequest =
+    detailRow.status === 'Amendment Requested'
+      ? [...history].reverse().find((entry) => entry.action === 'Amendment Requested')
+      : undefined;
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-full sm:max-w-4xl h-full flex flex-col p-0">
@@ -305,7 +313,7 @@ const RequisitionDetailSheet = ({ open, onOpenChange, detailRow, canEdit, updati
               </div>
               <div className="flex items-center gap-2">
                 <span className={`badge badge-outline ${statusBadge[detailRow.status] ?? statusBadge.Pending}`}>
-                  {detailRow.status}
+                  {requisitionStatusLabel(detailRow.status)}
                 </span>
                 <button
                   type="button"
@@ -321,6 +329,22 @@ const RequisitionDetailSheet = ({ open, onOpenChange, detailRow, canEdit, updati
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
+
+          {detailRow.status === 'Amendment Requested' && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 space-y-2">
+              <p className="text-sm font-semibold text-amber-800">Amendment requested</p>
+              {amendmentRequest?.reason && (
+                <p className="text-sm text-amber-900 whitespace-pre-wrap">{amendmentRequest.reason}</p>
+              )}
+              {isOwner && canEdit && onEdit ? (
+                <button type="button" className="btn btn-sm btn-warning" onClick={() => onEdit(detailRow)}>
+                  Edit and resubmit
+                </button>
+              ) : (
+                <p className="text-xs text-amber-700">Waiting for the requester to amend and resubmit.</p>
+              )}
+            </div>
+          )}
 
           {/* — Meta — */}
           <section className="space-y-3">
@@ -338,6 +362,11 @@ const RequisitionDetailSheet = ({ open, onOpenChange, detailRow, canEdit, updati
                 <p className="text-xs text-slate-500">Requested By</p>
                 <p className="font-medium text-slate-900 mt-0.5">{detailRow.requestedBy?.name || '—'}</p>
                 <p className="text-xs text-slate-400">{detailRow.requestedBy?.email}</p>
+                {requesterPhone && <p className="text-xs text-slate-400">{requesterPhone}</p>}
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <p className="text-xs text-slate-500">Submitted</p>
+                <p className="font-medium text-slate-900 mt-0.5">{formatDateTime(detailRow.createdAt)}</p>
               </div>
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                 <p className="text-xs text-slate-500">Outcome</p>
@@ -377,12 +406,6 @@ const RequisitionDetailSheet = ({ open, onOpenChange, detailRow, canEdit, updati
                   <p className="text-sm text-amber-800 mt-0.5">{detailRow.rejectionReason}</p>
                 </div>
               )}
-              {/* <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                <p className="text-xs text-slate-500">Created</p>
-                <p className="font-medium text-slate-900 mt-0.5">
-                  {new Date(detailRow.createdAt).toLocaleDateString('en-UG', { day: '2-digit', month: 'short', year: 'numeric' })}
-                </p>
-              </div> */}
             </div>
           </section>
 
@@ -435,16 +458,15 @@ const RequisitionDetailSheet = ({ open, onOpenChange, detailRow, canEdit, updati
 
           {/* — Audit trail — */}
           {(() => {
-            let log: { action: string; reason?: string; by?: string; at?: string }[] = [];
-            try { log = detailRow.reason ? JSON.parse(detailRow.reason) : []; } catch { log = []; }
-            let userMap: Record<string, string> = {};
-            try { userMap = Object.fromEntries((users ?? []).map(u => [u.id, u.name])); } catch { userMap = {}; }
+            const log = history;
             if (!log.length) return null;
             const actionColour: Record<string, string> = {
               Approved: 'bg-green-500',
               Rejected: 'bg-rose-500',
-              Pending: 'bg-blue-500',
+              Accepted: 'bg-blue-500',
+              Submitted: 'bg-slate-400',
               'Amendment Requested': 'bg-amber-500',
+              Amended: 'bg-amber-500',
             };
             return (
               <section className="space-y-3">
@@ -456,11 +478,11 @@ const RequisitionDetailSheet = ({ open, onOpenChange, detailRow, canEdit, updati
                   {log.map((entry, i) => (
                     <li key={i} className="ml-4">
                       <span className={`absolute -left-1.5 mt-1.5 h-3 w-3 rounded-full border-2 border-white ${actionColour[entry.action] ?? 'bg-slate-400'}`} />
-                      <p className="text-xs font-semibold text-slate-800">{entry.action} by {entry.by ? userMap[entry.by] ?? entry.by : 'Unknown'}</p>
+                      <p className="text-xs font-semibold text-slate-800">{historyLabel(entry.action)} by {entry.byName || 'Unknown'}</p>
                       {entry.reason && <p className="text-xs text-slate-600 mt-0.5">{entry.reason}</p>}
                       {entry.at && (
                         <p className="text-xs text-slate-400 mt-0.5">
-                          {new Date(entry.at).toLocaleString('en-UG', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                          {formatDateTime(entry.at)}
                         </p>
                       )}
                     </li>
@@ -494,8 +516,7 @@ const RequisitionDetailSheet = ({ open, onOpenChange, detailRow, canEdit, updati
           {/* — Approval — */}
 
           {/* {(canManageRequisitions && detailRow.status !!= 'Approved') && ( */}
-          {((canAcceptRequisitions && ['Pending', 'Amended'].includes(detailRow.status)) ||
-  (canApproveRequisitions && detailRow.status === 'Accepted')) && (
+          {canDecide && (
             <section className="space-y-3">
               <div className="flex items-center gap-2 pb-1 border-b">
                 <div className="p-1.5 bg-green-50 rounded text-green-600">
@@ -526,7 +547,7 @@ const RequisitionDetailSheet = ({ open, onOpenChange, detailRow, canEdit, updati
                       onClick={confirmAction}
                       disabled={updatingStatus || !reasonText.trim()}
                     >
-                      {updatingStatus ? 'Saving...' : `Confirm ${pendingAction}`}
+                      {updatingStatus ? 'Saving...' : pendingAction === 'Rejected' ? 'Confirm Rejection' : 'Confirm Amendment Request'}
                     </button>
                   </div>
                 </div>
@@ -543,11 +564,10 @@ const RequisitionDetailSheet = ({ open, onOpenChange, detailRow, canEdit, updati
                   <button
                     type="button"
                     className="btn btn-success w-full"
-                    onClick={() => handleAction(canAcceptRequisitions ? 'Accepted' : 'Approved')}
-                    disabled={updatingStatus || detailRow.status === 'Approved'}
+                    onClick={() => handleAction(approveStatus)}
+                    disabled={updatingStatus}
                   >
-                    {canAcceptRequisitions && detailRow.status === 'Pending' ? 'Accept' : 'Approve'}
-                    {/* Approve */}
+                    {approveLabel}
                   </button>
                   <button
                     type="button"

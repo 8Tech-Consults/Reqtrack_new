@@ -14,6 +14,74 @@ const toNumber = (value, fallback = 0) => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+const toIso = (value) => (value instanceof Date ? value.toISOString() : value);
+
+const sameUser = (a, b) => a != null && b != null && String(a) === String(b);
+
+// Who may edit a requisition, by its current status.
+const OWNER_EDITABLE_STATUSES = ['Pending', 'Amendment Requested'];
+const REVIEWER_EDITABLE_STATUSES = ['Pending', 'Amended'];
+
+// Legal decisions: current status -> permission needed -> statuses it may move to.
+const DECISIONS = ['Accepted', 'Rejected', 'Amendment Requested'];
+const TRANSITIONS = {
+  Pending: { permission: 'can_accept_requisitions', next: DECISIONS },
+  Amended: { permission: 'can_accept_requisitions', next: DECISIONS },
+  Accepted: { permission: 'can_approve_requisitions', next: ['Approved', 'Rejected', 'Amendment Requested'] },
+};
+const REASON_REQUIRED = ['Rejected', 'Amendment Requested'];
+
+// Stored status -> the wording shown to people (first approval is "Approved",
+// final sign-off is "Authorized").
+const DECISION_WORDING = {
+  Accepted: 'approved',
+  Approved: 'authorized',
+  Rejected: 'rejected',
+  'Amendment Requested': 'returned for amendment',
+};
+
+const requireUser = (context) => {
+  const user = context?.req?.user;
+  if (!user?.id) {
+    throw new GraphQLError('Authentication required.', { extensions: { code: 'UNAUTHENTICATED' } });
+  }
+  return user;
+};
+
+// People who act on requisitions always see everyone's; otherwise
+// can_view_own_requisitions narrows the view to the caller's own.
+const viewScope = (permissions) => {
+  const canAccept = hasPermission(permissions, 'can_accept_requisitions');
+  const canApprove = hasPermission(permissions, 'can_approve_requisitions');
+  return {
+    ownOnly: hasPermission(permissions, 'can_view_own_requisitions') && !canAccept && !canApprove,
+    approverOnly: canApprove && !canAccept,
+  };
+};
+
+const parseReasonLog = (value) => {
+  if (Array.isArray(value)) return value;
+  try {
+    const parsed = value ? JSON.parse(value) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+const getUserName = async (userId) => {
+  const [[row]] = await db.execute(`SELECT name FROM users WHERE id = ? LIMIT 1`, [userId]);
+  return row?.name || null;
+};
+
+const logEntry = ({ action, userId, userName, reason }) => ({
+  action,
+  at: new Date().toISOString(),
+  ...(reason ? { reason } : {}),
+  by: String(userId),
+  ...(userName ? { byName: userName } : {}),
+});
+
 const mapRequisitionItem = (row) => ({
   id: String(row.id),
   budgetLineId: row.budget_line_id ? String(row.budget_line_id) : null,
@@ -40,9 +108,9 @@ const mapRequisition = (row) => ({
   conceptNoteName: row.concept_note_name || null,
   status: row.status,
   rejectionReason: row.rejection_reason || null,
-  reason: row.reason || null,
+  reason: row.reason ? (typeof row.reason === 'string' ? row.reason : JSON.stringify(row.reason)) : null,
   totalRequestedAmount: toNumber(row.total_requested_amount, 0),
-  createdAt: row.created_at,
+  createdAt: toIso(row.created_at),
 });
 
 const fetchRequisitionItems = async (requisitionId) => {
@@ -57,17 +125,18 @@ const fetchRequisitionItems = async (requisitionId) => {
   return rows.map(mapRequisitionItem);
 };
 
-const getRequisitions = async ({ limit, offset, search, userId, canApproveRequisitions }) => {
+// Shared by the list and its count so the two can never disagree.
+const buildRequisitionsWhere = ({ search, userId, approverOnly }) => {
   const trimmed = search ? String(search).trim() : null;
   const values = [];
   let where = 'WHERE r.deleted = 0';
 
-  if (canApproveRequisitions) {
+  if (approverOnly) {
     where += ' AND r.status IN (?, ?, ?)';
     values.push('Approved', 'Accepted', 'Closed');
   }
 
-   if (userId) {
+  if (userId) {
     where += " AND r.requested_by = ?";
     values.push(userId);
   }
@@ -77,6 +146,12 @@ const getRequisitions = async ({ limit, offset, search, userId, canApproveRequis
     const like = `%${trimmed}%`;
     values.push(like, like, like);
   }
+
+  return { where, values };
+};
+
+const getRequisitions = async ({ limit, offset, search, userId, approverOnly }) => {
+  const { where, values } = buildRequisitionsWhere({ search, userId, approverOnly });
 
   let sql = `SELECT r.* FROM requisitions r ${where} ORDER BY r.id DESC`;
   if (typeof limit === 'number') {
@@ -113,35 +188,54 @@ const requisitionResolvers = {
         "You dont have permissions to view requisitions"
       );
 
-      const canViewRequisitions = hasPermission(
-        userPermissions,
-        "can_view_own_requisitions"
-      );
+      const { ownOnly, approverOnly } = viewScope(userPermissions);
 
-      const canAcceptRequisitions = hasPermission(
-        userPermissions,
-        "can_accept_requisitions"
-      );
-      const canApproveRequisitions = hasPermission(
-        userPermissions,
-        "can_approve_requisitions"
-      );
-      
-      return await getRequisitions({ 
-        limit, 
-        offset, 
+      return await getRequisitions({
+        limit,
+        offset,
         search,
-        userId : canViewRequisitions ? user_id : null,
-        canApproveRequisitions
+        userId: ownOnly ? user_id : null,
+        approverOnly,
       });
 
     },
-    requisition: async (_parent, { id }) => {
+    requisitionsCount: async (_parent, { search }, context) => {
+      const user = requireUser(context);
+      checkPermission(
+        user.permissions,
+        "can_view_requisitions",
+        "You dont have permissions to view requisitions"
+      );
+
+      const { ownOnly, approverOnly } = viewScope(user.permissions);
+      const { where, values } = buildRequisitionsWhere({
+        search,
+        userId: ownOnly ? user.id : null,
+        approverOnly,
+      });
+      const [[row]] = await db.execute(`SELECT COUNT(*) AS c FROM requisitions r ${where}`, values);
+      return Number(row?.c || 0);
+    },
+    requisition: async (_parent, { id }, context) => {
+      const user = requireUser(context);
+      checkPermission(
+        user.permissions,
+        "can_view_requisitions",
+        "You dont have permissions to view requisitions"
+      );
+
       const [[row]] = await db.execute(
         `SELECT * FROM requisitions WHERE id = ? AND deleted = 0 LIMIT 1`,
         [id]
       );
-      return row ? mapRequisition(row) : null;
+      if (!row) return null;
+
+      if (viewScope(user.permissions).ownOnly && !sameUser(row.requested_by, user.id)) {
+        throw new GraphQLError('You do not have permission to view this requisition.', {
+          extensions: { code: 'FORBIDDEN' },
+        });
+      }
+      return mapRequisition(row);
     },
     requisitionPrograms: async () => {
       const [rows] = await db.execute(
@@ -228,6 +322,37 @@ const requisitionResolvers = {
     items: async (parent) => {
       return await fetchRequisitionItems(parent.id);
     },
+    // The decision log with each actor resolved to a name and signature here,
+    // so viewers don't need permission to list users to see who did what.
+    history: async (parent) => {
+      const log = parseReasonLog(parent.reason);
+      if (!log.length) return [];
+
+      const ids = [...new Set(log.map((entry) => entry.by).filter(Boolean).map(String))];
+      const people = new Map();
+      if (ids.length) {
+        const [rows] = await db.execute(
+          `SELECT u.id, u.name, s.signature
+           FROM users u
+           LEFT JOIN staff s ON s.user_id = u.id
+           WHERE u.id IN (${ids.map(() => '?').join(', ')})`,
+          ids
+        );
+        rows.forEach((row) => people.set(String(row.id), row));
+      }
+
+      return log.map((entry) => {
+        const person = entry.by ? people.get(String(entry.by)) : null;
+        return {
+          action: String(entry.action || ''),
+          at: entry.at || null,
+          reason: entry.reason || null,
+          byId: entry.by ? String(entry.by) : null,
+          byName: person?.name || entry.byName || null,
+          bySignature: person?.signature || null,
+        };
+      });
+    },
     requestedBy: async (parent) => {
       const [user] = await getUsers({ id: parent.requestedById });
       return user || null;
@@ -269,17 +394,12 @@ const requisitionResolvers = {
         activityId,
         title,
         purpose,
-        status,
         items,
         conceptNote,
       } = input;
 
-      console.log('createRequisition input items:', input.items);
-
-      const userId = context?.req?.user?.id;
-      if (!userId) {
-        throw new GraphQLError('User is required.');
-      }
+      const user = requireUser(context);
+      const userId = user.id;
 
       if (!programId || !Array.isArray(items) || !items.length) {
         throw new GraphQLError('Program, title, and at least one item are required.', {
@@ -287,15 +407,86 @@ const requisitionResolvers = {
         });
       }
 
+      let existing = null;
+      let isOwner = true;
+      if (id) {
+        checkPermission(
+          user.permissions,
+          'can_edit_requisitions',
+          'You do not have permission to edit requisitions'
+        );
+
+        const [[row]] = await db.execute(
+          `SELECT id, requested_by, status, reason, total_requested_amount
+           FROM requisitions WHERE id = ? AND deleted = 0 LIMIT 1`,
+          [id]
+        );
+        if (!row) {
+          throw new GraphQLError('Requisition not found.', { extensions: { code: 'NOT_FOUND' } });
+        }
+
+        isOwner = sameUser(row.requested_by, userId);
+        if (!isOwner && viewScope(user.permissions).ownOnly) {
+          throw new GraphQLError('You can only edit your own requisitions.', {
+            extensions: { code: 'FORBIDDEN' },
+          });
+        }
+
+        const editable = isOwner ? OWNER_EDITABLE_STATUSES : REVIEWER_EDITABLE_STATUSES;
+        if (!editable.includes(row.status)) {
+          throw new GraphQLError(
+            `This requisition is ${row.status} and can no longer be edited.`,
+            { extensions: { code: 'BAD_USER_INPUT' } }
+          );
+        }
+        existing = row;
+      } else {
+        checkPermission(
+          user.permissions,
+          'can_create_requisitions',
+          'You do not have permission to create requisitions'
+        );
+        if (!conceptNote) {
+          throw new GraphQLError('Concept note is required.', {
+            extensions: { code: 'BAD_USER_INPUT' },
+          });
+        }
+      }
+
       const totalRequestedAmount = items.reduce((sum, item) => {
         const quantity = toNumber(item.quantity, 1);
         const frequency = toNumber(item.frequency, 1);
         const unitCost = toNumber(item.unitCost, 0);
-        const units = item.units;
-        return sum + quantity * frequency * unitCost ;
+        return sum + quantity * frequency * unitCost;
       }, 0);
 
-      const requisitionNo = input?.requisitionNo || (id ? null : await getNextRequisitionNo());
+      // A requester saving after an amendment request is resubmitting for review.
+      const resubmitting = Boolean(existing) && isOwner && existing.status === 'Amendment Requested';
+      const nextStatus = !existing ? 'Pending' : resubmitting ? 'Amended' : existing.status;
+
+      const userName = await getUserName(userId);
+      const reasonLog = parseReasonLog(existing?.reason);
+      if (!existing) {
+        reasonLog.push(logEntry({ action: 'Submitted', userId, userName }));
+      } else if (resubmitting) {
+        reasonLog.push(logEntry({ action: 'Amended', userId, userName }));
+      } else if (!isOwner) {
+        // A reviewer changed someone else's requisition: keep a record of it.
+        const before = toNumber(existing.total_requested_amount, 0);
+        reasonLog.push(
+          logEntry({
+            action: 'Adjusted',
+            userId,
+            userName,
+            reason:
+              before === totalRequestedAmount
+                ? 'Requisition details edited; total unchanged.'
+                : `Total changed from ${before} to ${totalRequestedAmount}.`,
+          })
+        );
+      }
+
+      const requisitionNo = id ? null : await getNextRequisitionNo();
 
       const connection = await db.getConnection();
       try {
@@ -310,44 +501,67 @@ const requisitionResolvers = {
             outcome_id: outcomeId || null,
             output_id: outputId || null,
             activity_id: activityId || null,
-            requested_by: userId,
             title: String(title).trim(),
             purpose: purpose || null,
-            status: 'Pending',
+            status: nextStatus,
+            reason: JSON.stringify(reasonLog),
             total_requested_amount: totalRequestedAmount,
-            deleted: 0,
             updated_at: new Date(),
-            ...(id ? {} : { created_at: new Date() }),
+            // The requester and creation time are fixed at creation.
+            ...(id ? {} : { requested_by: userId, deleted: 0, created_at: new Date() }),
           },
           connection,
         });
 
         const requisitionIdString = String(requisitionId);
-      
+
         //upload concept note file if provided
         let conceptInfo = null;
         if (conceptNote) {
           try {
-                conceptInfo = await saveUpload({
-                  file: conceptNote,
-                  subdir: "concept_notes",
-                });
-              } catch (e) {
-                // If upload fails, rollback and bubble up
-                throw new GraphQLError(`Concept note upload failed: ${e.message}`);
-              }
+            conceptInfo = await saveUpload({
+              file: conceptNote,
+              subdir: "concept_notes",
+            });
+          } catch (e) {
+            // If upload fails, rollback and bubble up
+            throw new GraphQLError(`Concept note upload failed: ${e.message}`);
+          }
         }
 
-        for (const [index, item] of items.entries()) {
+        // Lines the caller dropped from the form are removed; the rest are
+        // updated in place and new ones inserted.
+        const existingItemIds = new Set();
+        if (id) {
+          const [itemRows] = await connection.execute(
+            `SELECT id FROM requisition_items WHERE requisition_id = ?`,
+            [requisitionIdString]
+          );
+          itemRows.forEach((row) => existingItemIds.add(String(row.id)));
+
+          const keptIds = new Set(items.map((item) => (item.id ? String(item.id) : null)));
+          for (const itemId of existingItemIds) {
+            if (!keptIds.has(itemId)) {
+              await connection.execute(
+                `DELETE FROM requisition_items WHERE id = ? AND requisition_id = ?`,
+                [itemId, requisitionIdString]
+              );
+            }
+          }
+        }
+
+        for (const item of items) {
           const quantity = toNumber(item.quantity, 1);
           const frequency = toNumber(item.frequency, 1);
           const unitCost = toNumber(item.unitCost, 0);
           const units = toNumber(item.units, 1);
           const amount = quantity * frequency * unitCost;
+          // Only update a line that really belongs to this requisition.
+          const itemId = item.id && existingItemIds.has(String(item.id)) ? item.id : null;
 
           await saveData({
             table: 'requisition_items',
-            id: item.id ?? null,
+            id: itemId,
             data: {
               requisition_id: requisitionIdString,
               budget_line_id: item.budgetLineId,
@@ -357,9 +571,8 @@ const requisitionResolvers = {
               unit_cost: unitCost,
               units,
               amount,
-              // sort_order: index,
               updated_at: new Date(),
-              created_at: new Date(),
+              ...(itemId ? {} : { created_at: new Date() }),
             },
             connection,
           });
@@ -388,15 +601,18 @@ const requisitionResolvers = {
           [requisitionIdString]
         );
 
-        // Newly-submitted requisitions notify whoever can approve them.
-        // (Edits to an existing requisition don't re-notify.)
-        if (!id && saved) {
+        // New and resubmitted requisitions notify whoever reviews them first.
+        if (saved && (!id || resubmitting)) {
           notifyUsersWithPermission({
             permissionKey: 'can_accept_requisitions',
             excludeUserId: userId,
-            type: 'RequisitionSubmitted',
-            title: 'New requisition awaiting approval',
-            message: `${saved.title} (${saved.requisition_no}) was submitted for approval.`,
+            type: resubmitting ? 'RequisitionAmended' : 'RequisitionSubmitted',
+            title: resubmitting
+              ? 'Amended requisition awaiting approval'
+              : 'New requisition awaiting approval',
+            message: resubmitting
+              ? `${saved.title} (${saved.requisition_no}) was amended and resubmitted for approval.`
+              : `${saved.title} (${saved.requisition_no}) was submitted for approval.`,
             entityType: 'Requisition',
             entityId: requisitionIdString,
             createdBy: userId,
@@ -405,7 +621,9 @@ const requisitionResolvers = {
 
         return {
           success: true,
-          message: id ? 'Requisition updated successfully' : 'Requisition created successfully',
+          message: resubmitting
+            ? 'Requisition resubmitted successfully'
+            : id ? 'Requisition updated successfully' : 'Requisition created successfully',
           requisition: saved ? mapRequisition(saved) : null,
         };
       } catch (error) {
@@ -416,8 +634,11 @@ const requisitionResolvers = {
       }
     },
     updateRequisitionStatus: async (_parent, { id, status, reason }, context) => {
+      const user = requireUser(context);
+      const userId = user.id;
+
       const [[current]] = await db.execute(
-        `SELECT reason, requested_by, title, requisition_no FROM requisitions WHERE id = ? AND deleted = 0 LIMIT 1`,
+        `SELECT status, reason, requested_by, title, requisition_no FROM requisitions WHERE id = ? AND deleted = 0 LIMIT 1`,
         [id]
       );
 
@@ -425,19 +646,35 @@ const requisitionResolvers = {
         throw new GraphQLError('Requisition not found.', { extensions: { code: 'NOT_FOUND' } });
       }
 
-      let reasonLog = [];
-      try {
-        reasonLog = current.reason ? JSON.parse(current.reason) : [];
-      } catch {
-        reasonLog = [];
+      const transition = TRANSITIONS[current.status];
+      if (!transition || !transition.next.includes(status)) {
+        throw new GraphQLError(
+          `A requisition that is ${current.status} cannot be moved to ${status}.`,
+          { extensions: { code: 'BAD_USER_INPUT' } }
+        );
+      }
+      checkPermission(
+        user.permissions,
+        transition.permission,
+        'You do not have permission to act on this requisition at its current stage'
+      );
+
+      const trimmedReason = String(reason || '').trim();
+      if (REASON_REQUIRED.includes(status) && !trimmedReason) {
+        throw new GraphQLError('A reason is required for this decision.', {
+          extensions: { code: 'BAD_USER_INPUT' },
+        });
       }
 
-      reasonLog.push({
-        action: status,
-        at: new Date().toISOString(),
-        ...(reason ? { reason } : {}),
-        ...(context?.req?.user?.id ? { by: String(context.req.user.id) } : {}),
-      });
+      const reasonLog = parseReasonLog(current.reason);
+      reasonLog.push(
+        logEntry({
+          action: status,
+          userId,
+          userName: await getUserName(userId),
+          reason: trimmedReason || null,
+        })
+      );
 
       await db.execute(
         `UPDATE requisitions SET status = ?, reason = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND deleted = 0`,
@@ -453,22 +690,64 @@ const requisitionResolvers = {
         throw new GraphQLError('Requisition not found.', { extensions: { code: 'NOT_FOUND' } });
       }
 
+      const label = `${current.title} (${current.requisition_no})`;
+      const wording = DECISION_WORDING[status] || status.toLowerCase();
+
       // Let the requester know once a decision has been made on their request.
-      if (['Approved','Accepted', 'Rejected'].includes(status) && current.requested_by) {
+      if (current.requested_by) {
         notifyUser({
           userId: current.requested_by,
-          type: `Requisition${status}`,
-          title: `Requisition ${status.toLowerCase()}`,
-          message: `${current.title} (${current.requisition_no}) was ${status.toLowerCase()}.`,
+          type: `Requisition${status.replace(/\s+/g, '')}`,
+          title: `Requisition ${wording}`,
+          message: `${label} was ${wording}.${trimmedReason ? ` Reason: ${trimmedReason}` : ''}`,
           entityType: 'Requisition',
           entityId: id,
-          createdBy: context?.req?.user?.id || null,
+          createdBy: userId,
+        });
+      }
+
+      // First approval hands the requisition on to whoever gives final authorization.
+      if (status === 'Accepted') {
+        notifyUsersWithPermission({
+          permissionKey: 'can_approve_requisitions',
+          excludeUserId: userId,
+          type: 'RequisitionAwaitingAuthorization',
+          title: 'Requisition awaiting authorization',
+          message: `${label} was approved and is awaiting your authorization.`,
+          entityType: 'Requisition',
+          entityId: id,
+          createdBy: userId,
         });
       }
 
       return mapRequisition(updated);
     },
-    deleteRequisition: async (_parent, { id }) => {
+    deleteRequisition: async (_parent, { id }, context) => {
+      const user = requireUser(context);
+      checkPermission(
+        user.permissions,
+        'can_edit_requisitions',
+        'You do not have permission to delete requisitions'
+      );
+
+      const [[current]] = await db.execute(
+        `SELECT requested_by, status FROM requisitions WHERE id = ? AND deleted = 0 LIMIT 1`,
+        [id]
+      );
+      if (!current) return false;
+
+      const isOwner = sameUser(current.requested_by, user.id);
+      if (!isOwner && viewScope(user.permissions).ownOnly) {
+        throw new GraphQLError('You can only delete your own requisitions.', {
+          extensions: { code: 'FORBIDDEN' },
+        });
+      }
+      if (!OWNER_EDITABLE_STATUSES.includes(current.status)) {
+        throw new GraphQLError(`This requisition is ${current.status} and can no longer be deleted.`, {
+          extensions: { code: 'BAD_USER_INPUT' },
+        });
+      }
+
       const [result] = await db.execute(
         `UPDATE requisitions SET deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND deleted = 0`,
         [id]

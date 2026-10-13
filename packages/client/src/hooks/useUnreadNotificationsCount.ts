@@ -1,7 +1,8 @@
 import { useQuery } from '@apollo/client/react';
 import { GET_UNREAD_NOTIFICATIONS_COUNT } from '@/gql/notifications';
 
-const POLL_INTERVAL_MS = 30000;
+// Approvers are expected to see a new request within a few seconds of it being raised.
+export const NOTIFICATIONS_POLL_INTERVAL_MS = 5000;
 
 /**
  * Polls how many unread notifications the current user has, for badge dots
@@ -11,7 +12,7 @@ const POLL_INTERVAL_MS = 30000;
 export function useUnreadNotificationsCount() {
   const { data, refetch } = useQuery<{ unreadNotificationsCount: number }>(
     GET_UNREAD_NOTIFICATIONS_COUNT,
-    { pollInterval: POLL_INTERVAL_MS, fetchPolicy: 'cache-and-network' }
+    { pollInterval: NOTIFICATIONS_POLL_INTERVAL_MS, fetchPolicy: 'cache-and-network' }
   );
 
   return { count: data?.unreadNotificationsCount || 0, refetch };

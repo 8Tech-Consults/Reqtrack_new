@@ -3,6 +3,8 @@ import { Upload, Trash2, Plus } from 'lucide-react';
 import { Accountability, AccountabilityItemInput } from '../accountability';
 import { GET_ACCOUNTABILITIES, SAVE_ACCOUNTABILITY } from '@/gql/accountabilities';
 import { AccountabilityStatus } from '@/pages/accountabilities/accountability.ts';
+import { toast } from 'sonner';
+import { toFriendlyErrorMessage } from '@/utils';
 import { useMutation } from '@apollo/client/react';
 import { URL_2 } from '@/config/urls';
 
@@ -113,7 +115,6 @@ export function AccountabilityForm({ requisitionId, requisitionItems, existing, 
     existing?.reportDate?.slice(0, 10) ?? new Date().toISOString().slice(0, 10)
   );
   const [summary, setSummary] = useState(existing?.summary ?? '');
-  const [status, setStatus] = useState<AccountabilityStatus>(existing?.status ?? 'Draft');
   const [items, setItems] = useState<ItemDraft[]>(
     existing?.items?.length
       ? existing.items.map((it) => ({
@@ -168,11 +169,19 @@ export function AccountabilityForm({ requisitionId, requisitionItems, existing, 
       const cleared = clearedFiles[index] ?? new Set();
       // Only send a file field if the user picked a new file or explicitly cleared
       // the existing one. Otherwise omit it so the backend leaves it untouched.
-      const { invoiceExistingName, proofOfPaymentExistingName, receiptExistingName, ...rest } = it;
+      const {
+        invoiceExistingName,
+        proofOfPaymentExistingName,
+        receiptExistingName,
+        invoice,
+        proofOfPayment,
+        receipt,
+        ...rest
+      } = it;
       const filePatch: Partial<AccountabilityItemInput> = {};
-      if (it.invoice || cleared.has('invoice')) filePatch.invoice = it.invoice;
-      if (it.proofOfPayment || cleared.has('proofOfPayment')) filePatch.proofOfPayment = it.proofOfPayment;
-      if (it.receipt || cleared.has('receipt')) filePatch.receipt = it.receipt;
+      if (invoice || cleared.has('invoice')) filePatch.invoice = invoice;
+      if (proofOfPayment || cleared.has('proofOfPayment')) filePatch.proofOfPayment = proofOfPayment;
+      if (receipt || cleared.has('receipt')) filePatch.receipt = receipt;
 
       return {
         ...rest,
@@ -180,25 +189,32 @@ export function AccountabilityForm({ requisitionId, requisitionItems, existing, 
       };
     });
 
-    const { data } = await save({
-      variables: {
-        input: {
-          id: existing?.id ?? null,
-          requisitionId,
-          reportDate,
-          summary: summary || null,
-          status: submitStatus,
-          items: payloadItems,
+    try {
+      const { data } = await save({
+        variables: {
+          input: {
+            id: existing?.id ?? null,
+            requisitionId,
+            reportDate,
+            summary: summary || null,
+            status: submitStatus,
+            items: payloadItems,
+          },
         },
-      },
-    });
-    const savedId = data?.saveAccountability.accountability?.id;
-    if (savedId) onSaved(savedId);
+      });
+      const savedId = data?.saveAccountability.accountability?.id;
+      if (savedId) {
+        toast.success(data?.saveAccountability.message || 'Accountability saved.');
+        onSaved(savedId);
+      }
+    } catch (err) {
+      toast.error(toFriendlyErrorMessage(err, 'Unable to save this accountability. Please try again.'));
+    }
   };
 
   return (
     <form
-      onSubmit={(e) => { e.preventDefault(); handleSubmit(status); }}
+      onSubmit={(e) => { e.preventDefault(); handleSubmit('Pending'); }}
       className="space-y-6"
     >
       <div className="grid grid-cols-2 gap-4">
@@ -297,21 +313,21 @@ export function AccountabilityForm({ requisitionId, requisitionItems, existing, 
               <div className="grid grid-cols-3 gap-3">
                 <FileSlot
                   label="Invoice"
-                  file={item.invoice}
+                  file={item.invoice ?? null}
                   existingName={item.invoiceExistingName}
                   onChange={(f) => updateItem(index, { invoice: f })}
                   onClearExisting={() => clearExistingFile(index, 'invoice')}
                 />
                 <FileSlot
                   label="Proof of Payment"
-                  file={item.proofOfPayment}
+                  file={item.proofOfPayment ?? null}
                   existingName={item.proofOfPaymentExistingName}
                   onChange={(f) => updateItem(index, { proofOfPayment: f })}
                   onClearExisting={() => clearExistingFile(index, 'proofOfPayment')}
                 />
                 <FileSlot
                   label="Receipt"
-                  file={item.receipt}
+                  file={item.receipt ?? null}
                   existingName={item.receiptExistingName}
                   onChange={(f) => updateItem(index, { receipt: f })}
                   onClearExisting={() => clearExistingFile(index, 'receipt')}

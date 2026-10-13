@@ -1,10 +1,8 @@
 export type AccountabilityStatus =
   | 'Draft'
   | 'Pending'
-  | 'Under Review'
-  | 'Approved'
-  | 'Rejected'
   | 'Amend'
+  | 'Amended'
   | 'Closed';
 
 export interface AccountabilitiesVars {
@@ -52,9 +50,9 @@ export interface AccountabilityItemInput {
   accountedAmount: number | null;
   bankCharges: number | null;
   description: string | null;
-  invoice: File | null;
-  proofOfPayment: File | null;
-  receipt: File | null;
+  invoice?: File | null;
+  proofOfPayment?: File | null;
+  receipt?: File | null;
   requisitionItemId: string | null;
 }
 

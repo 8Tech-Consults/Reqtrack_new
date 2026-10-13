@@ -114,11 +114,19 @@ const AppRoutingSetup = (): ReactElement => {
         <Route element={<Demo8Layout />}>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<Suspense fallback={<DashboardRouteSkeleton />}><DashboardPage /></Suspense>} />
-          <Route path="/projects" element={<ProjectsPage />} />
-          <Route path="/requisitions" element={<RequisitionsListPage />} />
-          <Route path="/requisitions/:id/accountability" element={<AccountabilityPage />} />
+          <Route path="/projects" element={<PermissionGuard
+            required={['can_view_programs']}
+          ><ProjectsPage /></PermissionGuard>} />
+          <Route path="/requisitions" element={<PermissionGuard
+            required={['can_view_requisitions']}
+          ><RequisitionsListPage /></PermissionGuard>} />
+          <Route path="/requisitions/:id/accountability" element={<PermissionGuard
+            required={['can_view_requisitions']}
+          ><AccountabilityPage /></PermissionGuard>} />
 
-          <Route path="/settings/roles" element={<RolesListPage />} />
+          <Route path="/settings/roles" element={<PermissionGuard
+            required={['can_manage_staff']}
+          ><RolesListPage /></PermissionGuard>} />
           <Route path="/settings/users" element={<PermissionGuard
             required={['can_manage_staff']}
           ><UsersListPage /></PermissionGuard>} />

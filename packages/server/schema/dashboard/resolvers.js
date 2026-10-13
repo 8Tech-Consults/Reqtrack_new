@@ -1,6 +1,28 @@
 import { db } from '../../config/config.js';
 
+import { GraphQLError } from 'graphql';
+import hasPermission from '../../helpers/hasPermission.js';
 import { formatAmount } from '../../utils/dashboard/formatAmount.js';
+
+// Requisition filter for the signed-in user: deleted rows never count, and
+// people limited to their own requisitions only see their own numbers
+// (same rule as the requisitions list).
+const requisitionScope = (context, alias = '') => {
+  const user = context?.req?.user;
+  if (!user?.id) {
+    throw new GraphQLError('Authentication required.', { extensions: { code: 'UNAUTHENTICATED' } });
+  }
+  const permissions = user.permissions;
+  const ownOnly =
+    hasPermission(permissions, 'can_view_own_requisitions') &&
+    !hasPermission(permissions, 'can_accept_requisitions') &&
+    !hasPermission(permissions, 'can_approve_requisitions');
+  const col = (name) => (alias ? `${alias}.${name}` : name);
+  return {
+    sql: `${col('deleted')} = 0${ownOnly ? ` AND ${col('requested_by')} = ?` : ''}`,
+    params: ownOnly ? [user.id] : [],
+  };
+};
 
 function monthRange(date = new Date()) {
   const start = new Date(date.getFullYear(), date.getMonth(), 1);
@@ -12,42 +34,53 @@ const pct = (part, whole) => (whole > 0 ? Math.round((part / whole) * 10000) / 1
 
 const dashboardResolvers = {
   Query: {
-    requisitionStatusSummary: async () => {
-      const [[totalRow]] = await db.execute(`SELECT COUNT(*) as c FROM requisitions`);
-      const [[pendingRow]] = await db.execute(
-        `SELECT COUNT(*) as c FROM requisitions WHERE status = 'pending' OR status IS NULL`
-      );
-      const [[directorRow]] = await db.execute(
-        `SELECT COUNT(*) as c FROM requisitions WHERE status = 'accepted'`
-      );
-      const [[rejectedRow]] = await db.execute(
-        `SELECT COUNT(*) as c FROM requisitions WHERE status = 'rejected'`
-      );
-      const [[haltedRow]] = await db.execute(
-        `SELECT COUNT(*) as c FROM requisitions WHERE status = 'halted'`
-      );
+    requisitionStatusSummary: async (_, _args, context) => {
+      const scope = requisitionScope(context);
+      const count = async (extra = '') => {
+        const [[row]] = await db.execute(
+          `SELECT COUNT(*) as c FROM requisitions WHERE ${scope.sql}${extra}`,
+          scope.params
+        );
+        return { c: row.c };
+      };
 
+      const totalRow = await count();
+      // Waiting on the first approval, including ones resubmitted after an amendment.
+      const pendingRow = await count(` AND status IN ('Pending', 'Amended')`);
+      const directorRow = await count(` AND status = 'Accepted'`);
+      const rejectedRow = await count(` AND status = 'Rejected'`);
+      const haltedRow = await count(` AND status = 'halted'`);
+
+      // Authorized requisitions with no accountability submitted yet.
+      const rScope = requisitionScope(context, 'r');
       const [approvedAwaitingAccountability] = await db.execute(
         `SELECT s.name as staff_name
          FROM requisitions r
          JOIN users s ON s.id = r.requested_by
-         LEFT JOIN accountability_records a ON a.requisition_id = r.id
-         WHERE r.status = 'approved'
-           AND (a.id IS NULL OR a.status IS NULL)`
+         WHERE ${rScope.sql}
+           AND r.status = 'Approved'
+           AND NOT EXISTS (
+             SELECT 1 FROM accountability_records a
+             WHERE a.requisition_id = r.id AND a.status <> 'Draft'
+           )`,
+        rScope.params
       );
 
       const [[amountRow]] = await db.execute(
-        `SELECT SUM(total_requested_amount) as total FROM requisitions WHERE YEAR(created_at) = YEAR(CURDATE())`
+        `SELECT SUM(total_requested_amount) as total FROM requisitions
+         WHERE ${scope.sql} AND YEAR(created_at) = YEAR(CURDATE())`,
+        scope.params
       );
 
+      const inScope = `requisition_id IN (SELECT id FROM requisitions WHERE ${scope.sql})`;
       const { start, end } = monthRange();
       const [[accCountRow]] = await db.execute(
-        `SELECT COUNT(*) as c FROM accountability_records WHERE created_at >= ? AND created_at < ?`,
-        [start, end]
+        `SELECT COUNT(*) as c FROM accountability_records WHERE ${inScope} AND created_at >= ? AND created_at < ?`,
+        [...scope.params, start, end]
       );
       const [[closedAccCountRow]] = await db.execute(
-        `SELECT COUNT(*) as c FROM accountability_records WHERE created_at >= ? AND created_at < ? AND status = 'closed'`,
-        [start, end]
+        `SELECT COUNT(*) as c FROM accountability_records WHERE ${inScope} AND created_at >= ? AND created_at < ? AND status = 'closed'`,
+        [...scope.params, start, end]
       );
 
       const totalAmountRequested = amountRow.total ?? 0;
@@ -67,7 +100,8 @@ const dashboardResolvers = {
       };
     },
 
-    requisitionStatusChart: async () => {
+    requisitionStatusChart: async (_, _args, context) => {
+      const scope = requisitionScope(context);
       const [[row]] = await db.execute(
         `SELECT
            COUNT(*) as total,
@@ -76,8 +110,11 @@ const dashboardResolvers = {
            SUM(status = 'Amendment Requested') as require_Amendment,
            SUM(status = 'rejected') as rejected_count,
            SUM(status = 'amended') as amended_count,
-           SUM(status = 'accepted') as accepted_count
-         FROM requisitions`
+           SUM(status = 'accepted') as accepted_count,
+           SUM(status = 'closed') as closed_count
+         FROM requisitions
+         WHERE ${scope.sql}`,
+        scope.params
       );
 
       return {
@@ -88,6 +125,7 @@ const dashboardResolvers = {
         rejectedCount: row.rejected_count ?? 0,
         amendedCount: row.amended_count ?? 0,
         acceptedCount: row.accepted_count ?? 0,
+        closedCount: row.closed_count ?? 0,
       };
     },
 
@@ -182,14 +220,15 @@ const dashboardResolvers = {
       };
     },
 
-    yearExpense: async (_, args) => {
+    yearExpense: async (_, args, context) => {
+      const scope = requisitionScope(context);
       const [rows] = await db.execute(
         `SELECT MONTH(created_at) as month, SUM(total_requested_amount) as total_amount
          FROM requisitions
-         WHERE YEAR(created_at) = ?
+         WHERE ${scope.sql} AND YEAR(created_at) = ?
          GROUP BY MONTH(created_at)
          ORDER BY month`,
-        [args.year]
+        [...scope.params, args.year]
       );
       return rows.map((r) => ({ month: r.month, totalAmount: r.total_amount }));
     },
@@ -345,11 +384,15 @@ const dashboardResolvers = {
       };
     },
 
-    accountabilityHighlights: async (_, args) => {
+    accountabilityHighlights: async (_, args, context) => {
       const limit = args.limit ?? 5;
+      const scope = requisitionScope(context);
+      const reqScope = requisitionScope(context, 'req');
+      const inScope = `requisition_id IN (SELECT id FROM requisitions WHERE ${scope.sql})`;
 
       const [[totalRow]] = await db.execute(
-        `SELECT SUM(total_accounted_amount) as total FROM accountability_records`
+        `SELECT SUM(total_accounted_amount) as total FROM accountability_records WHERE ${inScope}`,
+        scope.params
       );
       const totalAccountedAmount = Number(totalRow.total ?? 0);
 
@@ -359,12 +402,12 @@ const dashboardResolvers = {
       const lastMonth = monthRange(lastMonthDate);
 
       const [[thisMonthRow]] = await db.execute(
-        `SELECT SUM(total_accounted_amount) as total FROM accountability_records WHERE created_at >= ? AND created_at < ?`,
-        [thisMonth.start, thisMonth.end]
+        `SELECT SUM(total_accounted_amount) as total FROM accountability_records WHERE ${inScope} AND created_at >= ? AND created_at < ?`,
+        [...scope.params, thisMonth.start, thisMonth.end]
       );
       const [[lastMonthRow]] = await db.execute(
-        `SELECT SUM(total_accounted_amount) as total FROM accountability_records WHERE created_at >= ? AND created_at < ?`,
-        [lastMonth.start, lastMonth.end]
+        `SELECT SUM(total_accounted_amount) as total FROM accountability_records WHERE ${inScope} AND created_at >= ? AND created_at < ?`,
+        [...scope.params, lastMonth.start, lastMonth.end]
       );
 
       const thisMonthTotal = Number(thisMonthRow.total ?? 0);
@@ -379,7 +422,9 @@ const dashboardResolvers = {
           SUM(status = 'closed') as closed_count,
           SUM(status = 'halted') as halted_count,
           SUM(status IS NULL OR status NOT IN ('closed', 'halted')) as pending_count
-        FROM accountability_records`
+        FROM accountability_records
+        WHERE ${inScope}`,
+        scope.params
       );
       const breakdownTotal = breakdownRow.total || 1;
       const statusBreakdown = {
@@ -397,9 +442,10 @@ const dashboardResolvers = {
           req.total_requested_amount as assigned_amount
         FROM accountability_records acc
         JOIN requisitions req ON req.id = acc.requisition_id
+        WHERE ${reqScope.sql}
         ORDER BY acc.created_at DESC
         LIMIT ?`,
-        [limit]
+        [...reqScope.params, limit]
       );
 
       const recent = recentRows.map((r) => {

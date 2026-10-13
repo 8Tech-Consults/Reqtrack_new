@@ -55,11 +55,11 @@ const roleResolvers = {
   },
   Mutation: {
     saveRole: async (parent, args, context) => {
-      // requireAnyPermission(
-      //   context,
-      //   ["can_manage_roles", "can_create_roles"],
-      //   "You do not have permission to save roles.",
-      // );
+      requireAnyPermission(
+        context,
+        ["can_manage_roles", "can_create_roles", "can_manage_staff"],
+        "You do not have permission to save roles.",
+      );
       try {
         const { id, role_name, description } = args.payload;
 
@@ -132,11 +132,11 @@ const roleResolvers = {
       }
     },
     updateRolePermissions: async (parent, args, context) => {
-      // requireAnyPermission(
-      //   context,
-      //   ["can_manage_roles", "can_update_role_permissions"],
-      //   "You do not have permission to update role permissions.",
-      // );
+      requireAnyPermission(
+        context,
+        ["can_manage_roles", "can_update_role_permissions", "can_manage_staff"],
+        "You do not have permission to update role permissions.",
+      );
       try {
         const { role_id, permissions } = args.payload;
 

@@ -21,6 +21,7 @@ const dashboardTypeDefs = `#graphql
     requireAmendmentCount: Int!
     amendedCount: Int!
     acceptedCount: Int!
+    closedCount: Int!
   }
 
   type ActivityAmount {

@@ -11,6 +11,7 @@ import {
   type NotificationRecord,
 } from '@/gql/notifications';
 import { getNotificationPath } from '@/utils/notificationLink';
+import { NOTIFICATIONS_POLL_INTERVAL_MS } from '@/hooks/useUnreadNotificationsCount';
 import { formatDate } from '@/pages/staff/blocks/StaffList';
 
 const RECENT_LIMIT = 8;
@@ -30,7 +31,11 @@ const DropdownNotifications = ({ menuTtemRef }: IDropdownNotificationProps) => {
 
   const { data, loading, refetch } = useQuery<{ notifications: NotificationRecord[] }>(
     GET_NOTIFICATIONS,
-    { variables: { limit: RECENT_LIMIT }, fetchPolicy: 'cache-and-network' }
+    {
+      variables: { limit: RECENT_LIMIT },
+      fetchPolicy: 'cache-and-network',
+      pollInterval: NOTIFICATIONS_POLL_INTERVAL_MS,
+    }
   );
   const notifications = data?.notifications || [];
   const unreadCount = notifications.filter((n) => !n.isRead).length;

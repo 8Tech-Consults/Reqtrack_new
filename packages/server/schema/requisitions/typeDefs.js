@@ -44,6 +44,15 @@ const requisitionsTypeDefs = `#graphql
     amount: Float!
   }
 
+  type RequisitionHistoryEntry {
+    action: String!
+    at: String
+    reason: String
+    byId: ID
+    byName: String
+    bySignature: String
+  }
+
   type Requisition {
     id: ID!
     requisitionNo: String!
@@ -64,6 +73,7 @@ const requisitionsTypeDefs = `#graphql
     status: String!
     rejectionReason: String
     reason: String
+    history: [RequisitionHistoryEntry!]!
     totalRequestedAmount: Float!
     createdAt: String!
     items: [RequisitionItem!]!
@@ -87,7 +97,7 @@ const requisitionsTypeDefs = `#graphql
     activityId: ID
     title: String!
     purpose: String
-    conceptNote: Upload!
+    conceptNote: Upload
     status: String
     items: [CreateRequisitionItemInput!]!
   }
@@ -100,6 +110,7 @@ const requisitionsTypeDefs = `#graphql
 
   type Query {
     requisitions(limit: Int, offset: Int, search: String): [Requisition!]!
+    requisitionsCount(search: String): Int!
     requisition(id: ID!): Requisition
     requisitionPrograms: [RequisitionProgramOption!]!
     requisitionOutcomes(projectYearId: ID!): [RequisitionSimpleOption!]!
