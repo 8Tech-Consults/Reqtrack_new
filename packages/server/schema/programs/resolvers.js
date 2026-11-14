@@ -9,6 +9,7 @@ import { db } from '../../config/config.js';
 import checkPermission from '../../helpers/checkPermission.js';
 import hasPermission from '../../helpers/hasPermission.js';
 import saveUpload from '../../helpers/saveUpload.js';
+import { notifyUser } from '../../helpers/notifications.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -384,71 +385,87 @@ const programsResolvers = {
       }
 
       const data = {
-
         name: String(input?.name || '').trim(),
         description: input?.description ? String(input.description).trim() : null,
         budget_amount: Number(input?.budgetAmount || 0),
         program_manager_id: input?.programManagerId || null,
         status: input?.status || 'active',
         deleted: 0,
-        created_by: userId,
         updated_by: userId,
-        created_at: new Date(),
         updated_at: new Date()
       };
 
-      // type is only set at creation time and is immutable afterward, so it's
-      // deliberately left out of update payloads regardless of what's requested.
+      // type, created_by and created_at are only set at creation time, so an
+      // edit never overwrites them.
       if (!saveId) {
         data.type = requestedType;
+        data.created_by = userId;
+        data.created_at = new Date();
       }
 
       if (!data.name) {
         throw new GraphQLError('Program name is required.', { extensions: { code: 'BAD_USER_INPUT' } });
       }
 
-      const [[existing]] = await db.execute(
-        `SELECT id FROM programs WHERE deleted = 0 AND LOWER(name) = LOWER(?) LIMIT 1`,
-        [data.name]
-      );
+      let connection;
+      let previous = null;
+      let savedId;
 
-      if (existing && String(existing.id) !== String(input?.id || '')) {
-        throw new GraphQLError('A program with this name already exists.', {
-          extensions: { code: 'BAD_USER_INPUT' }
+      try {
+        const [[existing]] = await db.execute(
+          `SELECT id FROM programs WHERE deleted = 0 AND LOWER(name) = LOWER(?) LIMIT 1`,
+          [data.name]
+        );
+
+        if (existing && String(existing.id) !== String(saveId || '')) {
+          throw new GraphQLError('A program with this name already exists.', {
+            extensions: { code: 'BAD_USER_INPUT' }
+          });
+        }
+
+        if (saveId) {
+          [[previous]] = await db.execute(
+            `SELECT id, program_manager_id FROM programs WHERE id = ? AND deleted = 0 LIMIT 1`,
+            [saveId]
+          );
+          if (!previous) {
+            throw new GraphQLError('Program not found.', { extensions: { code: 'NOT_FOUND' } });
+          }
+        }
+
+        // The program and (for Admin programs) its General outcome/output are saved
+        // together, so a failure never leaves a half-created program behind.
+        connection = await db.getConnection();
+        await connection.beginTransaction();
+
+        savedId = await saveData({ table: 'programs', id: saveId, data, connection });
+
+        if (!saveId && requestedType === 'Admin') {
+          const outcomeId = await saveData({
+            table: 'program_outcomes',
+            id: null,
+            data: { program_id: savedId, name: 'General', sort_order: 0, deleted: 0 },
+            connection
+          });
+
+          await saveData({
+            table: 'program_outputs',
+            id: null,
+            data: { outcome_id: outcomeId, name: 'General', sort_order: 0, deleted: 0 },
+            connection
+          });
+        }
+
+        await connection.commit();
+      } catch (error) {
+        if (connection) await connection.rollback().catch(() => undefined);
+        if (error instanceof GraphQLError) throw error;
+        console.error('createProgram error:', error);
+        throw new GraphQLError(saveId ? 'Failed to update the program.' : 'Failed to create the program.', {
+          extensions: { code: 'INTERNAL_SERVER_ERROR' }
         });
-      }
-
-      const savedId = await saveData({
-        table: 'programs',
-        id: saveId,
-        data,
-        connection: null
-      });
-
-      if (!saveId && requestedType === 'Admin') {
-        const outcomeId = await saveData({
-          table: 'program_outcomes',
-          id: null,
-          data: {
-            program_id: savedId,
-            name: 'General',
-            sort_order: 0,
-            deleted: 0
-          },
-          connection: null
-        });
-
-        await saveData({
-          table: 'program_outputs',
-          id: null,
-          data: {
-            outcome_id: outcomeId,
-            name: 'General',
-            sort_order: 0,
-            deleted: 0
-          },
-          connection: null
-        });
+      } finally {
+        if (connection) connection.release();
       }
 
       const [programs] = await db.execute(
@@ -460,20 +477,64 @@ const programsResolvers = {
          LIMIT 1`,
         [savedId]
       );
+      const program = programs[0];
+
+      // Tell the program's assigned staff member (in-app + email). Skipped when they
+      // made the change themselves. notifyUser never throws, so this can't fail the save.
+      const managerId = program?.program_manager_id || null;
+      const managerChanged = !saveId || String(previous?.program_manager_id || '') !== String(managerId || '');
+      if (managerId && String(managerId) !== String(userId || '')) {
+        const isAssignment = managerChanged;
+        const title = isAssignment ? 'You have been assigned a program' : 'A program you manage was updated';
+        const message = isAssignment
+          ? `You have been assigned to manage the program "${program.name}".`
+          : `The program "${program.name}" was updated.`;
+        const clientUrl = String(process.env.CLIENT_URL || context?.req?.headers?.origin || '').replace(/\/+$/, '');
+
+        notifyUser({
+          userId: managerId,
+          type: isAssignment ? 'ProgramAssigned' : 'ProgramUpdated',
+          title,
+          message,
+          entityType: 'Program',
+          entityId: savedId,
+          createdBy: userId,
+          email: {
+            subject: `${title}: ${program.name}`,
+            template: {
+              heading: title,
+              preheader: message,
+              paragraphs: [
+                message,
+                isAssignment
+                  ? 'You can now view its budget and the requisitions raised against it.'
+                  : 'Open the program to review the latest details.'
+              ],
+              details: [
+                { label: 'Program', value: program.name },
+                { label: 'Type', value: program.type === 'Admin' ? 'Administrative' : 'Activity' },
+                { label: 'Budget', value: `UGX ${Number(program.budget_amount || 0).toLocaleString('en-US')}` },
+                { label: 'Status', value: program.status }
+              ],
+              ...(clientUrl ? { action: { label: 'Open program', url: `${clientUrl}/projects` } } : {})
+            }
+          }
+        });
+      }
 
       return {
         success: true,
-        message: input?.id ? 'Program updated successfully.' : 'Program created successfully.',
+        message: saveId ? 'Program updated successfully.' : 'Program created successfully.',
         program: {
-          id: String(programs[0].id) || null,
-          name: programs[0].name,
-          description: programs[0].description || '',
-          budgetAmount: Number(programs[0].budget_amount || 0),
-          programManagerId: programs[0].program_manager_id || null,
-          programManagerName: programs[0].program_manager_name || null,
-          status: programs[0].status,
-          type: programs[0].type || 'Activity',
-          createdAt: programs[0].created_at,
+          id: String(program.id),
+          name: program.name,
+          description: program.description || '',
+          budgetAmount: Number(program.budget_amount || 0),
+          programManagerId: program.program_manager_id || null,
+          programManagerName: program.program_manager_name || null,
+          status: program.status,
+          type: program.type || 'Activity',
+          createdAt: program.created_at,
           outcomes: []
         }
       };

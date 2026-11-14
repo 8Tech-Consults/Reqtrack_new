@@ -7,6 +7,7 @@ import clsx from 'clsx';
 import { useNavigate } from 'react-router-dom';
 import { useLayout } from '@/providers';
 import { AxiosError } from 'axios';
+import { toAbsoluteUrl } from '@/utils';
 
 const passwordSchema = Yup.object().shape({
   newPassword: Yup.string()
@@ -66,7 +67,7 @@ const ResetPasswordChange = () => {
         setSubmitting(false);
       }
     }
-  });
+  }); 
 
   return (
     <div className="card max-w-[370px] w-full">
@@ -75,10 +76,24 @@ const ResetPasswordChange = () => {
         onSubmit={formik.handleSubmit}
         noValidate
       >
-        <div className="text-center">
-          <h3 className="text-lg font-medium text-gray-900">Reset Password</h3>
-          <span className="text-2sm text-gray-700">Enter your new password</span>
+        <div className="mb-6 text-center sm:mb-7">
+          <div className="mx-auto mb-2 flex h-[88px] w-[104px] items-center justify-center sm:mb-3 sm:h-[100px] sm:w-[118px]">
+            <img
+              src={toAbsoluteUrl('/media/logos/logo.png')}
+              className="h-full w-full object-contain"
+              alt="NAD"
+            />
+          </div>
+          <h1 className="text-[28px] font-bold leading-tight tracking-[-0.03em] text-[#172550]">
+            Reset Password
+          </h1>
+          <p className="mt-2 text-sm text-slate-500">Enter your new password</p>
         </div>
+
+        {/* <div className="text-center">
+          <h3 className="text-lg font-medium text-gray-900"></h3>
+          <span className="text-2sm text-gray-700"></span>
+        </div> */}
 
         {hasErrors && <Alert variant="danger">{formik.status}</Alert>}
 
@@ -157,7 +172,8 @@ const ResetPasswordChange = () => {
 
         <button
           type="submit"
-          className="btn btn-primary flex justify-center grow"
+          // className="btn btn-primary flex justify-center grow"
+          className="mt-6 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#172550] px-4 text-sm font-bold text-white shadow-[0_12px_24px_-14px_rgba(23,37,80,0.9)] outline-none transition-[background-color,box-shadow,transform] duration-150 hover:bg-[#213363] hover:shadow-[0_15px_28px_-14px_rgba(23,37,80,0.95)] focus-visible:ring-4 focus-visible:ring-[#72d6ee]/45 focus-visible:ring-offset-2 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-65 disabled:shadow-none disabled:active:scale-100"
           disabled={loading}
         >
           {loading ? 'Please wait...' : 'Submit'}
