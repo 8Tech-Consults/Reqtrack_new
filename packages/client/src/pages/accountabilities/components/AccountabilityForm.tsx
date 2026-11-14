@@ -47,6 +47,9 @@ function emptyItem(): ItemDraft {
   };
 }
 
+const NARRATIVE_MAX_BYTES = 2 * 1024 * 1024;
+const NARRATIVE_ACCEPT = '.pdf,.doc,.docx';
+
 // Adjust this path to match wherever your backend actually serves accountability files.
 const existingFileUrl = (name: string) => `${URL_2}/accountability_docs/${name}`;
 
@@ -56,19 +59,21 @@ const FileSlot = ({
   existingName,
   onChange,
   onClearExisting,
+  accept = 'application/pdf,image/*',
 }: {
   label: string;
   file: File | null;
   existingName?: string | null;
   onChange: (f: File | null) => void;
   onClearExisting?: () => void;
+  accept?: string;
 }) => (
   <div className="space-y-1">
     <label className="text-xs font-medium text-slate-500">{label}</label>
     <div className="relative rounded-lg border border-dashed border-slate-300 p-2 text-center hover:bg-slate-50">
       <input
         type="file"
-        accept="application/pdf,image/*"
+        accept={accept}
         className="absolute inset-0 cursor-pointer opacity-0"
         onChange={(e) => onChange(e.target.files?.[0] ?? null)}
       />
@@ -115,6 +120,20 @@ export function AccountabilityForm({ requisitionId, requisitionItems, existing, 
     existing?.reportDate?.slice(0, 10) ?? new Date().toISOString().slice(0, 10)
   );
   const [summary, setSummary] = useState(existing?.summary ?? '');
+  const [narrativeReport, setNarrativeReport] = useState<File | null>(null);
+  const existingNarrativeName = existing?.narrativeReport || null;
+
+  const handleNarrativeChange = (file: File | null) => {
+    if (file && file.size > NARRATIVE_MAX_BYTES) {
+      toast.error('The narrative report must not be larger than 2 MB.');
+      return;
+    }
+    if (file && !NARRATIVE_ACCEPT.split(',').some((ext) => file.name.toLowerCase().endsWith(ext))) {
+      toast.error('The narrative report must be a PDF or Word document.');
+      return;
+    }
+    setNarrativeReport(file);
+  };
   const [items, setItems] = useState<ItemDraft[]>(
     existing?.items?.length
       ? existing.items.map((it) => ({
@@ -165,6 +184,12 @@ export function AccountabilityForm({ requisitionId, requisitionItems, existing, 
   const totalAccounted = items.reduce((sum, it) => sum + (it.accountedAmount ?? 0) + (it.bankCharges ?? 0), 0);
 
   const handleSubmit = async (submitStatus: AccountabilityStatus) => {
+    // Drafts may be saved without a narrative; a submission may not.
+    if (submitStatus !== 'Draft' && !narrativeReport && !existingNarrativeName) {
+      toast.error('A narrative report is required before submitting.');
+      return;
+    }
+
     const payloadItems = items.map((it, index) => {
       const cleared = clearedFiles[index] ?? new Set();
       // Only send a file field if the user picked a new file or explicitly cleared
@@ -197,6 +222,8 @@ export function AccountabilityForm({ requisitionId, requisitionItems, existing, 
             requisitionId,
             reportDate,
             summary: summary || null,
+            // Only sent when a new file was picked; otherwise the one on file is kept.
+            ...(narrativeReport ? { narrativeReport } : {}),
             status: submitStatus,
             items: payloadItems,
           },
@@ -237,6 +264,17 @@ export function AccountabilityForm({ requisitionId, requisitionItems, existing, 
             className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
+      </div>
+
+      <div className="space-y-1">
+        <FileSlot
+          label="Narrative Report (required to submit)"
+          file={narrativeReport}
+          existingName={existingNarrativeName}
+          onChange={handleNarrativeChange}
+          accept={NARRATIVE_ACCEPT}
+        />
+        <p className="text-xs text-slate-400">PDF or Word document, not more than 2 MB.</p>
       </div>
 
       <div className="space-y-3">

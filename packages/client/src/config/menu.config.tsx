@@ -43,16 +43,29 @@ export const MENU_SIDEBAR: TMenuConfig = [
       },
       {
         title: 'User accounts',
-        icon: 'profile-user',
-        path: '/settings/users'
+        icon: 'user',
+        path: '/settings/users',
+        requiredPermissions: [getPerm("staff", "can_manage_users")]
       },
       {
         title: 'Roles & permissions',
         icon: 'shield-tick',
-        path: '/settings/roles'
+        path: '/settings/roles',
+        requiredPermissions: [getPerm("staff", "can_manage_users")]
       }
     ],
     requiredPermissions: [getPerm("staff", "can_manage_staff")]
+  },
+  {
+    title: 'Help Centre',
+    icon: 'question-2',
+    path: '/help'
+  },
+  {
+    title: 'Help Centre content',
+    icon: 'book-open',
+    path: '/settings/help-centre',
+    requiredPermissions: [getPerm("help_centre", "can_manage_help_centre")]
   }
 ];
 

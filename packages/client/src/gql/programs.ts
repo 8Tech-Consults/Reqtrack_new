@@ -141,20 +141,60 @@ export type ProgramRecord = {
 };
 
 export const UPLOAD_PROGRAM_BUDGET = gql`
-  mutation UploadProgramBudget($programId: ID!, $file: Upload!) {
-    uploadProgramBudget(programId: $programId, file: $file) {
+  mutation UploadProgramBudget($programId: ID!, $file: Upload!, $dryRun: Boolean) {
+    uploadProgramBudget(programId: $programId, file: $file, dryRun: $dryRun) {
       success
       message
+      dryRun
+      changes {
+        level
+        action
+        path
+        name
+        units
+        unitPrice
+        quantity
+        frequency
+        totalAmount
+        previousUnits
+        previousUnitPrice
+        previousQuantity
+        previousFrequency
+        previousTotalAmount
+      }
       createdBudgetLines
+      updatedBudgetLines
+      unchangedBudgetLines
       errors
     }
   }
 `;
 
+export type ProgramBudgetUploadChange = {
+  level: 'outcome' | 'output' | 'activity' | 'budgetLine';
+  action: 'new' | 'updated' | 'unchanged';
+  path?: string | null;
+  name: string;
+  units?: string | null;
+  unitPrice?: number | null;
+  quantity?: number | null;
+  frequency?: number | null;
+  totalAmount?: number | null;
+  previousUnits?: string | null;
+  previousUnitPrice?: number | null;
+  previousQuantity?: number | null;
+  previousFrequency?: number | null;
+  previousTotalAmount?: number | null;
+};
+
 export type ProgramBudgetUploadResult = {
   success: boolean;
   message: string;
+  dryRun?: boolean | null;
+  changes?: ProgramBudgetUploadChange[] | null;
   createdBudgetLines?: number | null;
+  updatedBudgetLines?: number | null;
+  unchangedBudgetLines?: number | null;
   errors?: string[] | null;
 };
 

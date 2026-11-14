@@ -44,6 +44,12 @@ const cellNumber = (cell) => {
   return Number.isFinite(value) ? value : null;
 };
 
+// Names are matched trimmed + case-insensitively when merging an upload into
+// the existing structure.
+const nameKey = (value) => String(value ?? '').trim().toLowerCase();
+
+const sameNumber = (a, b) => Math.abs(Number(a || 0) - Number(b || 0)) < 0.005;
+
 const parseBudgetWorkbook = async (filePath, programType) => {
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.readFile(filePath);
@@ -57,6 +63,7 @@ const parseBudgetWorkbook = async (filePath, programType) => {
   let currentOutcome = null;
   let currentOutput = null;
   let currentActivity = null;
+  const seenLineKeys = new Set();
 
   const lastRow = Math.max(sheet.actualRowCount || 0, sheet.rowCount || 0);
   for (let rowNumber = BUDGET_TEMPLATE_DATA_START_ROW; rowNumber <= lastRow; rowNumber += 1) {
@@ -89,17 +96,30 @@ const parseBudgetWorkbook = async (filePath, programType) => {
     if (quantity === null || quantity <= 0) rowErrors.push('Quantity must be a number greater than 0');
     if (frequency === null || frequency <= 0) rowErrors.push('Frequency must be a number greater than 0');
 
+    // Admin-type programs are always attached under the hidden
+    // General/General outcome+output created at program setup time -
+    // Outcome/Output columns are meant to stay blank for them.
+    const lineOutcome = programType === 'Admin' ? 'General' : currentOutcome;
+    const lineOutput = programType === 'Admin' ? 'General' : currentOutput;
+
+    // Budget lines are merged into the existing structure by name, so a name
+    // may only appear once per activity or the match would be ambiguous.
+    if (currentActivity) {
+      const lineKey = [lineOutcome, lineOutput, currentActivity, costTypeText].map(nameKey).join('|');
+      if (seenLineKeys.has(lineKey)) {
+        rowErrors.push(`duplicate budget line under activity "${currentActivity}"`);
+      }
+      seenLineKeys.add(lineKey);
+    }
+
     if (rowErrors.length) {
       errors.push(`Row ${rowNumber} ("${costTypeText}"): ${rowErrors.join(', ')}.`);
       continue;
     }
 
     lines.push({
-      // Admin-type programs are always attached under the hidden
-      // General/General outcome+output created at program setup time -
-      // Outcome/Output columns are meant to stay blank for them.
-      outcome: programType === 'Admin' ? 'General' : currentOutcome,
-      output: programType === 'Admin' ? 'General' : currentOutput,
+      outcome: lineOutcome,
+      output: lineOutput,
       activity: currentActivity,
       name: costTypeText,
       units: unitsText,
@@ -120,24 +140,24 @@ const buildBudgetTree = (lines) => {
   const outcomeByName = new Map();
 
   for (const line of lines) {
-    let outcome = outcomeByName.get(line.outcome);
+    let outcome = outcomeByName.get(nameKey(line.outcome));
     if (!outcome) {
       outcome = { name: line.outcome, sortOrder: outcomes.length, outputs: [], outputByName: new Map() };
-      outcomeByName.set(line.outcome, outcome);
+      outcomeByName.set(nameKey(line.outcome), outcome);
       outcomes.push(outcome);
     }
 
-    let output = outcome.outputByName.get(line.output);
+    let output = outcome.outputByName.get(nameKey(line.output));
     if (!output) {
       output = { name: line.output, sortOrder: outcome.outputs.length, activities: [], activityByName: new Map() };
-      outcome.outputByName.set(line.output, output);
+      outcome.outputByName.set(nameKey(line.output), output);
       outcome.outputs.push(output);
     }
 
-    let activity = output.activityByName.get(line.activity);
+    let activity = output.activityByName.get(nameKey(line.activity));
     if (!activity) {
       activity = { name: line.activity, sortOrder: output.activities.length, budgetLines: [] };
-      output.activityByName.set(line.activity, activity);
+      output.activityByName.set(nameKey(line.activity), activity);
       output.activities.push(activity);
     }
 
@@ -339,7 +359,7 @@ const programsResolvers = {
         "can_view_own_programs"
       );
 
-      console.log(canViewOwnPrograms, user_id)
+      // console.log(canViewOwnPrograms, user_id)
 
       const canManageAllPrograms = hasPermission(
         userPermissions,
@@ -508,7 +528,7 @@ const programsResolvers = {
               data: outputData
             });
 
-            console.log('outputId', outputId)
+            // console.log('outputId', outputId)
 
             for (const activities of output?.activities || []) {
               const activityData = {
@@ -525,7 +545,7 @@ const programsResolvers = {
                 id: activities?.id ? String(activities.id) : null,
                 data: activityData,
               });
-              console.log('activityId', activityId)
+              // console.log('activityId', activityId)
 
               for (const budgetLine of activities?.budgetLines || []) {
                 const budgetLineData = {
@@ -564,7 +584,7 @@ const programsResolvers = {
         connection.release();
       }
     },
-    uploadProgramBudget: async (_parent, { programId, file }, context) => {
+    uploadProgramBudget: async (_parent, { programId, file, dryRun = false }, context) => {
       const userPermissions = context?.req?.user?.permissions;
       checkPermission(
         userPermissions,
@@ -632,117 +652,193 @@ const programsResolvers = {
       try {
         await connection.beginTransaction();
 
-        // Upload replaces the program's entire existing budget structure.
-        const [existingOutcomes] = await connection.execute(
-          `SELECT id FROM program_outcomes WHERE program_id = ? AND deleted = 0`,
-          [id]
-        );
-        const outcomeIds = existingOutcomes.map((row) => row.id);
-        if (outcomeIds.length) {
-          const outcomePlaceholders = outcomeIds.map(() => '?').join(', ');
-          const [existingOutputs] = await connection.execute(
-            `SELECT id FROM program_outputs WHERE outcome_id IN (${outcomePlaceholders}) AND deleted = 0`,
-            outcomeIds
+        // Merge the upload into the existing structure by name rather than
+        // replacing it: requisitions reference these rows by id, so existing
+        // outcomes/outputs/activities/budget lines are reused (and budget
+        // line values updated where they changed). Nothing is deleted - rows
+        // missing from the file are left as they are.
+        //
+        // With dryRun the exact same work runs inside the transaction and is
+        // then rolled back, so the preview always matches what Save applies.
+        const loadChildren = async (table, parentColumn, parentId, columns = 'id, name, sort_order') => {
+          const [rows] = await connection.execute(
+            `SELECT ${columns} FROM ${table}
+             WHERE ${parentColumn} = ? AND deleted = 0
+             ORDER BY sort_order ASC, created_at ASC`,
+            [parentId]
           );
-          const outputIds = existingOutputs.map((row) => row.id);
-          if (outputIds.length) {
-            const outputPlaceholders = outputIds.map(() => '?').join(', ');
-            const [existingActivities] = await connection.execute(
-              `SELECT id FROM program_activities WHERE output_id IN (${outputPlaceholders}) AND deleted = 0`,
-              outputIds
-            );
-            const activityIds = existingActivities.map((row) => row.id);
-            if (activityIds.length) {
-              const activityPlaceholders = activityIds.map(() => '?').join(', ');
-              await connection.execute(
-                `UPDATE program_budget_lines SET deleted = 1 WHERE activity_id IN (${activityPlaceholders})`,
-                activityIds
-              );
-              await connection.execute(
-                `UPDATE program_activities SET deleted = 1 WHERE id IN (${activityPlaceholders})`,
-                activityIds
-              );
-            }
-            await connection.execute(
-              `UPDATE program_outputs SET deleted = 1 WHERE id IN (${outputPlaceholders})`,
-              outputIds
-            );
+          const byName = new Map();
+          for (const row of rows) {
+            const key = nameKey(row.name);
+            if (!byName.has(key)) byName.set(key, row);
           }
-          await connection.execute(
-            `UPDATE program_outcomes SET deleted = 1 WHERE id IN (${outcomePlaceholders})`,
-            outcomeIds
-          );
-        }
+          return byName;
+        };
+
+        const changes = [];
+
+        const upsertNode = async ({ table, level, path, parentColumn, parentId, existing, name, sortOrder }) => {
+          const match = existing.get(nameKey(name));
+          if (match) {
+            if (Number(match.sort_order) !== sortOrder) {
+              await connection.execute(`UPDATE ${table} SET sort_order = ? WHERE id = ?`, [sortOrder, match.id]);
+            }
+            return match.id;
+          }
+          const newId = await saveData({
+            connection,
+            table,
+            id: null,
+            data: { [parentColumn]: parentId, name, sort_order: sortOrder, deleted: 0 },
+          });
+          existing.set(nameKey(name), { id: newId, name, sort_order: sortOrder });
+          changes.push({ level, action: 'new', path, name });
+          return newId;
+        };
 
         let createdBudgetLines = 0;
+        let updatedBudgetLines = 0;
+        let unchangedBudgetLines = 0;
 
+        const existingOutcomes = await loadChildren('program_outcomes', 'program_id', id);
         for (const outcome of tree) {
-          const outcomeId = await saveData({
-            connection,
+          const outcomeId = await upsertNode({
             table: 'program_outcomes',
-            id: null,
-            data: {
-              program_id: id,
-              name: outcome.name,
-              sort_order: outcome.sortOrder,
-              deleted: 0,
-            },
+            level: 'outcome',
+            path: null,
+            parentColumn: 'program_id',
+            parentId: id,
+            existing: existingOutcomes,
+            name: outcome.name,
+            sortOrder: outcome.sortOrder,
           });
 
+          const existingOutputs = await loadChildren('program_outputs', 'outcome_id', outcomeId);
           for (const output of outcome.outputs) {
-            const outputId = await saveData({
-              connection,
+            const outputId = await upsertNode({
               table: 'program_outputs',
-              id: null,
-              data: {
-                outcome_id: outcomeId,
-                name: output.name,
-                sort_order: output.sortOrder,
-                deleted: 0,
-              },
+              level: 'output',
+              path: outcome.name,
+              parentColumn: 'outcome_id',
+              parentId: outcomeId,
+              existing: existingOutputs,
+              name: output.name,
+              sortOrder: output.sortOrder,
             });
 
+            const existingActivities = await loadChildren('program_activities', 'output_id', outputId);
             for (const activity of output.activities) {
-              const activityId = await saveData({
-                connection,
+              const activityId = await upsertNode({
                 table: 'program_activities',
-                id: null,
-                data: {
-                  output_id: outputId,
-                  name: activity.name,
-                  sort_order: activity.sortOrder,
-                  deleted: 0,
-                },
+                level: 'activity',
+                path: `${outcome.name} › ${output.name}`,
+                parentColumn: 'output_id',
+                parentId: outputId,
+                existing: existingActivities,
+                name: activity.name,
+                sortOrder: activity.sortOrder,
               });
 
+              const linePath = `${outcome.name} › ${output.name} › ${activity.name}`;
+              const existingLines = await loadChildren(
+                'program_budget_lines',
+                'activity_id',
+                activityId,
+                'id, name, quantity, frequency, unit_price, units, total_amount, sort_order'
+              );
               for (const line of activity.budgetLines) {
-                await saveData({
-                  connection,
-                  table: 'program_budget_lines',
-                  id: null,
-                  data: {
-                    activity_id: activityId,
-                    name: line.name,
-                    quantity: line.quantity,
-                    frequency: line.frequency,
-                    unit_price: line.unitPrice,
-                    units: line.units,
-                    total_amount: line.quantity * line.frequency * line.unitPrice,
-                    sort_order: line.sortOrder,
-                    deleted: 0,
-                  },
-                });
-                createdBudgetLines += 1;
+                const totalAmount = line.quantity * line.frequency * line.unitPrice;
+                const match = existingLines.get(nameKey(line.name));
+                const lineChange = {
+                  level: 'budgetLine',
+                  path: linePath,
+                  name: line.name,
+                  units: line.units,
+                  unitPrice: line.unitPrice,
+                  quantity: line.quantity,
+                  frequency: line.frequency,
+                  totalAmount,
+                };
+
+                if (!match) {
+                  await saveData({
+                    connection,
+                    table: 'program_budget_lines',
+                    id: null,
+                    data: {
+                      activity_id: activityId,
+                      name: line.name,
+                      quantity: line.quantity,
+                      frequency: line.frequency,
+                      unit_price: line.unitPrice,
+                      units: line.units,
+                      total_amount: totalAmount,
+                      sort_order: line.sortOrder,
+                      deleted: 0,
+                    },
+                  });
+                  createdBudgetLines += 1;
+                  changes.push({ ...lineChange, action: 'new' });
+                  continue;
+                }
+
+                const previousUnits = String(match.units ?? '').trim();
+                const valuesChanged =
+                  previousUnits !== line.units ||
+                  !sameNumber(match.unit_price, line.unitPrice) ||
+                  !sameNumber(match.quantity, line.quantity) ||
+                  !sameNumber(match.frequency, line.frequency) ||
+                  !sameNumber(match.total_amount, totalAmount);
+
+                if (valuesChanged) {
+                  await connection.execute(
+                    `UPDATE program_budget_lines
+                     SET quantity = ?, frequency = ?, unit_price = ?, units = ?, total_amount = ?, sort_order = ?
+                     WHERE id = ?`,
+                    [line.quantity, line.frequency, line.unitPrice, line.units, totalAmount, line.sortOrder, match.id]
+                  );
+                  updatedBudgetLines += 1;
+                  changes.push({
+                    ...lineChange,
+                    action: 'updated',
+                    previousUnits,
+                    previousUnitPrice: Number(match.unit_price || 0),
+                    previousQuantity: Number(match.quantity || 0),
+                    previousFrequency: Number(match.frequency || 0),
+                    previousTotalAmount: Number(match.total_amount || 0),
+                  });
+                } else {
+                  if (Number(match.sort_order) !== line.sortOrder) {
+                    await connection.execute(
+                      `UPDATE program_budget_lines SET sort_order = ? WHERE id = ?`,
+                      [line.sortOrder, match.id]
+                    );
+                  }
+                  unchangedBudgetLines += 1;
+                  changes.push({ ...lineChange, action: 'unchanged' });
+                }
               }
             }
           }
         }
 
-        await connection.commit();
+        const plural = (count) => (count === 1 ? '' : 's');
+        const summary = `${createdBudgetLines} new, ${updatedBudgetLines} updated, ${unchangedBudgetLines} unchanged budget line${plural(createdBudgetLines + updatedBudgetLines + unchangedBudgetLines)}`;
+
+        if (dryRun) {
+          await connection.rollback();
+        } else {
+          await connection.commit();
+        }
+
         return {
           success: true,
-          message: `Budget uploaded successfully - ${createdBudgetLines} budget line${createdBudgetLines === 1 ? '' : 's'} saved.`,
+          dryRun: Boolean(dryRun),
+          message: dryRun ? `Preview - ${summary}.` : `Budget saved - ${summary}.`,
           createdBudgetLines,
+          updatedBudgetLines,
+          unchangedBudgetLines,
+          changes,
           errors: [],
         };
       } catch (error) {

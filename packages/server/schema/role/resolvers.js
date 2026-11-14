@@ -26,7 +26,7 @@ export const getRoles = async ({ id, role_name }) => {
 
     return results;
   } catch (error) {
-    console.log("error", error);
+    // console.log("error", error);
      throw new Error(`Failed to fetch seed labels: ${error.message}`);
     // throw new GraphQLError("Error fetching roles");
   }
@@ -87,7 +87,7 @@ const roleResolvers = {
           },
         };
       } catch (error) {
-        console.log("error", error);
+        // console.log("error", error);
         throw new GraphQLError(error.message);
       }
     },

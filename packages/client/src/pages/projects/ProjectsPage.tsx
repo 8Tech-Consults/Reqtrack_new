@@ -30,6 +30,7 @@ import {
   GET_PROGRAMS,
   ProgramManager,
   ProgramRecord,
+  ProgramBudgetUploadChange,
   ProgramBudgetUploadResult,
   SAVE_PROGRAM_STRUCTURE,
   UPLOAD_PROGRAM_BUDGET
@@ -41,6 +42,56 @@ const formatMoney = (value: number) =>
     currency: 'UGX',
     maximumFractionDigits: 0
   }).format(value || 0);
+
+const BUDGET_CHANGE_LEVEL_LABEL: Record<ProgramBudgetUploadChange['level'], string> = {
+  outcome: 'Outcome',
+  output: 'Output',
+  activity: 'Activity',
+  budgetLine: 'Budget line'
+};
+
+const formatQuantity = (value?: number | null) =>
+  new Intl.NumberFormat('en-UG', { maximumFractionDigits: 2 }).format(Number(value || 0));
+
+// One row per budget line in the upload preview. For updated lines, any
+// field whose value changes is shown as "old → new".
+const BudgetLinePreviewRow = ({ change }: { change: ProgramBudgetUploadChange }) => {
+  const isUpdate = change.action === 'updated';
+  const field = (
+    label: string,
+    current: string,
+    previous: string | null,
+  ) => {
+    const changed = isUpdate && previous !== null && previous !== current;
+    return (
+      <div className="min-w-0">
+        <p className="text-[10px] uppercase tracking-wide text-slate-400">{label}</p>
+        {changed ? (
+          <p className="text-xs">
+            <span className="text-slate-400 line-through">{previous}</span>{' '}
+            <span className="font-semibold text-amber-700">→ {current}</span>
+          </p>
+        ) : (
+          <p className="text-xs text-slate-700">{current}</p>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <li className="rounded-lg border border-slate-200 bg-white p-3">
+      <p className="text-sm font-medium text-slate-900">{change.name}</p>
+      {change.path && <p className="text-[11px] text-slate-500">{change.path}</p>}
+      <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5">
+        {field('Units', change.units || '', isUpdate ? change.previousUnits ?? '' : null)}
+        {field('Unit cost', formatMoney(Number(change.unitPrice)), isUpdate ? formatMoney(Number(change.previousUnitPrice)) : null)}
+        {field('Quantity', formatQuantity(change.quantity), isUpdate ? formatQuantity(change.previousQuantity) : null)}
+        {field('Frequency', formatQuantity(change.frequency), isUpdate ? formatQuantity(change.previousFrequency) : null)}
+        {field('Total', formatMoney(Number(change.totalAmount)), isUpdate ? formatMoney(Number(change.previousTotalAmount)) : null)}
+      </div>
+    </li>
+  );
+};
 
 const makeId = (prefix: string) => `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
 const cloneProgram = (program: ProgramRecord): ProgramRecord => structuredClone(program);
@@ -149,11 +200,8 @@ export const ProjectsPage = () => {
   });
   const [uploadProgramBudget, { loading: uploadingBudget }] = useMutation<
     { uploadProgramBudget: ProgramBudgetUploadResult },
-    { programId: string; file: File }
-  >(UPLOAD_PROGRAM_BUDGET, {
-    refetchQueries: [{ query: GET_PROGRAMS }],
-    awaitRefetchQueries: true
-  });
+    { programId: string; file: File; dryRun?: boolean }
+  >(UPLOAD_PROGRAM_BUDGET);
 
   const programs = data?.programs || [];
   const managers = managerData?.programManagers || [];
@@ -182,6 +230,10 @@ export const ProjectsPage = () => {
   const budgetFileInputRef = useRef<HTMLInputElement>(null);
   const [budgetUploadSheetOpen, setBudgetUploadSheetOpen] = useState(false);
   const [budgetUploadErrors, setBudgetUploadErrors] = useState<string[]>([]);
+  const [budgetUploadFile, setBudgetUploadFile] = useState<File | null>(null);
+  const [budgetPreview, setBudgetPreview] = useState<ProgramBudgetUploadResult | null>(null);
+  const [showUnchangedLines, setShowUnchangedLines] = useState(false);
+  const [savingBudgetUpload, setSavingBudgetUpload] = useState(false);
 
   // Inline "Add a brief program description..." affordance (Program header).
   // NOTE: SAVE_PROGRAM_STRUCTURE currently only persists the outcomes tree.
@@ -547,7 +599,7 @@ export const ProjectsPage = () => {
         }
       });
 
-      console.log('createProgram response:', response);
+      // console.log('createProgram response:', response);
 
       const savedProgram = response.data?.createProgram?.program;
       const wasEdit = Boolean(editingProgramId);
@@ -645,29 +697,84 @@ export const ProjectsPage = () => {
     event.target.value = '';
     if (!file || !selectedProgram) return;
 
-    const confirmed = window.confirm(
-      `Uploading will replace "${selectedProgram.name}"'s entire current budget with the contents of this file. Continue?`
-    );
-    if (!confirmed) return;
-
+    // Dry run: the server works out exactly what would change and rolls it
+    // back, so the user can review it before anything is saved.
     setBudgetUploadErrors([]);
+    setBudgetPreview(null);
+    setBudgetUploadFile(null);
+    setShowUnchangedLines(false);
     try {
-      const response = await uploadProgramBudget({ variables: { programId: selectedProgram.id, file } });
+      const response = await uploadProgramBudget({
+        variables: { programId: selectedProgram.id, file, dryRun: true }
+      });
       const result = response.data?.uploadProgramBudget;
 
       if (result?.success) {
-        setBudgetUploadSheetOpen(false);
-        toast.success(result.message);
+        setBudgetUploadFile(file);
+        setBudgetPreview(result);
       } else if (result?.errors?.length) {
         setBudgetUploadErrors(result.errors);
         toast.error('The file has errors. Review the details and try again.');
       } else {
-        toast.error(result?.message || 'Unable to upload this budget. Please try again.');
+        toast.error(result?.message || 'Unable to read this budget. Please try again.');
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Unable to upload this budget. Please try again.');
+      toast.error(error instanceof Error ? error.message : 'Unable to read this budget. Please try again.');
     }
   };
+
+  const resetBudgetUpload = () => {
+    setBudgetUploadErrors([]);
+    setBudgetPreview(null);
+    setBudgetUploadFile(null);
+    setShowUnchangedLines(false);
+  };
+
+  const handleBudgetUploadSheetChange = (open: boolean) => {
+    setBudgetUploadSheetOpen(open);
+    if (!open) resetBudgetUpload();
+  };
+
+  const handleSaveBudgetUpload = async () => {
+    if (!budgetUploadFile || !selectedProgram) return;
+    setSavingBudgetUpload(true);
+    try {
+      const response = await uploadProgramBudget({
+        variables: { programId: selectedProgram.id, file: budgetUploadFile, dryRun: false },
+        refetchQueries: [{ query: GET_PROGRAMS }],
+        awaitRefetchQueries: true
+      });
+      const result = response.data?.uploadProgramBudget;
+
+      if (result?.success) {
+        toast.success(result.message);
+        handleBudgetUploadSheetChange(false);
+      } else if (result?.errors?.length) {
+        setBudgetPreview(null);
+        setBudgetUploadErrors(result.errors);
+        toast.error('The file has errors. Review the details and try again.');
+      } else {
+        toast.error(result?.message || 'Unable to save this budget. Please try again.');
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to save this budget. Please try again.');
+    } finally {
+      setSavingBudgetUpload(false);
+    }
+  };
+
+  const budgetPreviewGroups = useMemo(() => {
+    const changes = budgetPreview?.changes || [];
+    return {
+      newStructure: changes.filter((change) => change.level !== 'budgetLine'),
+      newLines: changes.filter((change) => change.level === 'budgetLine' && change.action === 'new'),
+      updatedLines: changes.filter((change) => change.level === 'budgetLine' && change.action === 'updated'),
+      unchangedLines: changes.filter((change) => change.level === 'budgetLine' && change.action === 'unchanged')
+    };
+  }, [budgetPreview]);
+
+  const budgetPreviewHasChanges =
+    budgetPreviewGroups.newStructure.length + budgetPreviewGroups.newLines.length + budgetPreviewGroups.updatedLines.length > 0;
 
   return (
     <Container>
@@ -1368,7 +1475,7 @@ export const ProjectsPage = () => {
         </DialogContent>
       </Dialog>
 
-      <Sheet open={budgetUploadSheetOpen} onOpenChange={setBudgetUploadSheetOpen}>
+      <Sheet open={budgetUploadSheetOpen} onOpenChange={handleBudgetUploadSheetChange}>
         <SheetContent side="right" className="flex h-full w-full flex-col p-0 sm:max-w-[620px]">
           <div className="border-b bg-slate-50/50 p-6">
             <SheetHeader>
@@ -1390,15 +1497,24 @@ export const ProjectsPage = () => {
 
             <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-sm font-semibold text-slate-900">2. Upload the completed file</p>
-              <p className="text-xs text-amber-700">This replaces the program's current budget after you confirm.</p>
+              <p className="text-xs text-slate-500">You'll see a preview of what will change before anything is saved.</p>
+              {budgetUploadFile && (
+                <p className="text-xs text-slate-700">
+                  Selected: <span className="font-medium">{budgetUploadFile.name}</span>
+                </p>
+              )}
               <button
                 type="button"
-                className="btn btn-sm btn-primary w-fit gap-1.5"
+                className={clsx('btn btn-sm w-fit gap-1.5', budgetUploadFile ? 'btn-light' : 'btn-primary')}
                 onClick={handleUploadBudgetClick}
                 disabled={uploadingBudget || !selectedProgram}
               >
                 <Upload size={14} />
-                {uploadingBudget ? 'Uploading…' : 'Choose Excel file'}
+                {uploadingBudget && !savingBudgetUpload
+                  ? 'Reading file…'
+                  : budgetUploadFile
+                    ? 'Choose a different file'
+                    : 'Choose Excel file'}
               </button>
               <input ref={budgetFileInputRef} type="file" accept=".xlsx" className="hidden" onChange={handleBudgetFileSelected} />
             </div>
@@ -1420,10 +1536,112 @@ export const ProjectsPage = () => {
                 </ul>
               </div>
             )}
+
+            {budgetPreview && (
+              <div className="space-y-4 rounded-xl border border-slate-200 p-4">
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">3. Review the changes</p>
+                  <p className="text-xs text-slate-500">
+                    Items are matched by name. Nothing is deleted - items not in the file stay as they are.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {[
+                    { label: 'New items', value: budgetPreviewGroups.newStructure.length, tone: 'text-emerald-700' },
+                    { label: 'New lines', value: budgetPreviewGroups.newLines.length, tone: 'text-emerald-700' },
+                    { label: 'Updated lines', value: budgetPreviewGroups.updatedLines.length, tone: 'text-amber-700' },
+                    { label: 'Unchanged lines', value: budgetPreviewGroups.unchangedLines.length, tone: 'text-slate-500' }
+                  ].map((stat) => (
+                    <div key={stat.label} className="rounded-lg bg-slate-50 p-2.5">
+                      <p className={clsx('text-lg font-semibold', stat.tone)}>{stat.value}</p>
+                      <p className="text-[11px] text-slate-500">{stat.label}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {!budgetPreviewHasChanges && (
+                  <p className="rounded-lg bg-slate-50 p-3 text-xs text-slate-600">
+                    This file matches the current budget - there is nothing to save.
+                  </p>
+                )}
+
+                {!!budgetPreviewGroups.updatedLines.length && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Updated budget lines</p>
+                    <ul className="space-y-2">
+                      {budgetPreviewGroups.updatedLines.map((change, index) => (
+                        <BudgetLinePreviewRow key={`updated-${index}`} change={change} />
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {!!budgetPreviewGroups.newStructure.length && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">New outcomes, outputs &amp; activities</p>
+                    <ul className="space-y-1.5">
+                      {budgetPreviewGroups.newStructure.map((change, index) => (
+                        <li key={`structure-${index}`} className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+                          <span className="badge badge-xs badge-outline badge-success mr-2">
+                            {BUDGET_CHANGE_LEVEL_LABEL[change.level]}
+                          </span>
+                          <span className="text-sm text-slate-900">{change.name}</span>
+                          {change.path && <p className="text-[11px] text-slate-500">{change.path}</p>}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {!!budgetPreviewGroups.newLines.length && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">New budget lines</p>
+                    <ul className="space-y-2">
+                      {budgetPreviewGroups.newLines.map((change, index) => (
+                        <BudgetLinePreviewRow key={`new-${index}`} change={change} />
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {!!budgetPreviewGroups.unchangedLines.length && (
+                  <div className="space-y-2">
+                    <button
+                      type="button"
+                      className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-slate-500"
+                      onClick={() => setShowUnchangedLines((value) => !value)}
+                    >
+                      <ChevronRight size={14} className={clsx('transition-transform', showUnchangedLines && 'rotate-90')} />
+                      Unchanged budget lines ({budgetPreviewGroups.unchangedLines.length})
+                    </button>
+                    {showUnchangedLines && (
+                      <ul className="space-y-2">
+                        {budgetPreviewGroups.unchangedLines.map((change, index) => (
+                          <BudgetLinePreviewRow key={`unchanged-${index}`} change={change} />
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
-          <div className="flex justify-end border-t p-6">
-            <button type="button" className="btn btn-light" onClick={() => setBudgetUploadSheetOpen(false)}>Close</button>
+          <div className="flex justify-end gap-2 border-t p-6">
+            <button type="button" className="btn btn-light" onClick={() => handleBudgetUploadSheetChange(false)}>
+              {budgetPreview ? 'Cancel' : 'Close'}
+            </button>
+            {budgetPreview && (
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleSaveBudgetUpload}
+                disabled={savingBudgetUpload || uploadingBudget || !budgetPreviewHasChanges}
+              >
+                {savingBudgetUpload ? 'Saving…' : 'Save changes'}
+              </button>
+            )}
           </div>
         </SheetContent>
       </Sheet>

@@ -1,4 +1,4 @@
-import { Route, ShieldCheck, Briefcase, FileText, User, Users } from "lucide-react";
+import { Route, ShieldCheck, Briefcase, FileText, User, Users, LifeBuoy } from "lucide-react";
 
 export type PermissionItem = {
   id: string;
@@ -88,6 +88,14 @@ export const MODULES_CONFIG: ModuleConfig[] = [
         id: "can_update_role_permissions",
         label: "Can Update Role Permissions",
       },
+    ],
+  },
+  {
+    id: "help_centre",
+    name: "Help Centre",
+    icon: LifeBuoy,
+    permissions: [
+      { id: "can_manage_help_centre", label: "Can Manage Help Centre Articles" },
     ],
   },
 ];

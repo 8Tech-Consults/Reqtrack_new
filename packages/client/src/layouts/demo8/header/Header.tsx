@@ -28,6 +28,7 @@ import { DropdownUser } from '@/partials/dropdowns/user';
 import { ModalSearch } from '@/partials/modals/search/ModalSearch';
 import { SidebarMenu } from '../sidebar';
 import { useDemo8Layout } from '../';
+import { getPermissionsFromToken } from '@/utils/permissions';
 
 const Header = () => {
   const { setMobileSidebarOpen } = useDemo8Layout();
@@ -46,6 +47,10 @@ const Header = () => {
     last_name?: string;
     companyName?: string;
   };
+
+  const { auth } = useAuthContext();
+  const permissions = getPermissionsFromToken(auth?.access_token);
+  const canManageUsers = Boolean(permissions.can_manage_users);
 
   const displayName =
     profile?.fullname ||
@@ -104,7 +109,7 @@ const Header = () => {
               <span className="text-base font-bold tracking-[-0.01em]">NAD</span>
             </Link>
 
-            <DropdownMenu modal={false}>
+            {/* <DropdownMenu modal={false}>
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
@@ -141,7 +146,7 @@ const Header = () => {
                   </Link>
                 </DropdownMenuItem>
               </DropdownMenuContent>
-            </DropdownMenu>
+            </DropdownMenu> */}
           </div>
 
           <div className="min-w-0 flex-1 items-stretch px-3 xl:px-5">
@@ -210,7 +215,8 @@ const Header = () => {
               </AppMenu>
             </div>
 
-            <div className="hidden lg:block">
+            {canManageUsers && (
+              <div className="hidden lg:block">
               <AppMenu>
                 <MenuItem
                   ref={itemAppsRef}
@@ -225,6 +231,8 @@ const Header = () => {
                 </MenuItem>
               </AppMenu>
             </div>
+            )}
+            
 
             <span className="mx-1 h-7 w-px bg-white/15" aria-hidden="true" />
 

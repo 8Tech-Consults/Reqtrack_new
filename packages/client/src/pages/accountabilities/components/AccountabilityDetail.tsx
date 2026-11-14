@@ -170,8 +170,7 @@ export function AccountabilityDetail({ id, requestedAmount, onBack, onEdit, file
 
       {a.narrativeReport && (
         <div>
-          <p className="text-xs font-medium text-slate-500 mb-1">Narrative Report</p>
-          <p className="text-sm text-slate-700 whitespace-pre-wrap">{a.narrativeReport}</p>
+          <FileLink label="Narrative Report" name={a.narrativeReport} baseUrl={fileBaseUrl} />
         </div>
       )}
 

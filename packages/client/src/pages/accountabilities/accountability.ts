@@ -63,4 +63,5 @@ export interface AccountabilityInput {
   requisitionId: string | null;
   status: AccountabilityStatus | null;
   summary: string | null;
+  narrativeReport?: File | null;
 }

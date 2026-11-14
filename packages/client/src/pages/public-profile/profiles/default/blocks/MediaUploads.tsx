@@ -32,7 +32,7 @@ const MediaUploads = ({ ExpenseData }: MediaUploadsProps) => {
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
 ];
 
-console.log('data.............', ExpenseData)
+// console.log('data.............', ExpenseData)
   
 
   const data: number[] = (() => {
@@ -42,7 +42,7 @@ console.log('data.............', ExpenseData)
     });
     return byMonth;
   })();
-  console.log('data expense', data)
+  // console.log('data expense', data)
 
   const options: ApexOptions = {
     series: [

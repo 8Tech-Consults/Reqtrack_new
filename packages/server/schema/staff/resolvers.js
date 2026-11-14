@@ -16,7 +16,7 @@ export const fetchStaff = async ({
     search,}) => {
     
         try {
-    let where = "WHERE users.deleted = 0";
+    let where = "WHERE staff.deleted = 0";
     let values = [];
 
     if (id) {

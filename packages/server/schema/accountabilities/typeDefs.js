@@ -64,6 +64,7 @@ const accountabilitiesTypeDefs = `#graphql
     requisitionId: ID!
     reportDate: String
     summary: String
+    narrativeReport: Upload
     status: String
     items: [AccountabilityItemInput!]!
   }

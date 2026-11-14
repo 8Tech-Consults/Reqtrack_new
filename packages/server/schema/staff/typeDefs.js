@@ -20,7 +20,7 @@ const staffTypeDefs = `#graphql
         bank_account: String!
         tin: String!
         nssf: String!
-        marital_status: String!
+        marital_status: String
         next_of_kin: JSON!
         profile_picture: String
         signature: String

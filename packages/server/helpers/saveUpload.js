@@ -37,7 +37,7 @@ const saveUpload = async ({
 
     const baseDir = isPrivate ? "../private_uploads" : "../public";
     const folderPath = path.join(__dirname, baseDir, subdir);
-    console.log("Saving upload to:", folderPath);
+    // console.log("Saving upload to:", folderPath);
     await fs.promises.mkdir(folderPath, { recursive: true });
 
     filePath = path.join(folderPath, newFilename);

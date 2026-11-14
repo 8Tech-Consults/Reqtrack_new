@@ -23,13 +23,6 @@ import {
   loginRateLimitKey,
 } from "./utils/loginRateLimit.js";
 import graphqlUploadExpress from "graphql-upload/graphqlUploadExpress.mjs";
-import {
-  chat as aiChat,
-  explainError as aiExplainError,
-  suggestActions as aiSuggestActions,
-  summarize as aiSummarize,
-} from "./services/pwdAiAssistantService.js";
-
 
 import dotenv from "dotenv";
 dotenv.config();
@@ -359,67 +352,6 @@ app.get("/countries", async (req, res) => {
     res.json(data);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch data" });
-  }
-});
-
-const apiSuccess = (res, data, message = "OK") =>
-  res.json({ code: 1, status: 1, message, data });
-
-const apiError = (res, message, status = 400) =>
-  res.status(status).json({ code: 0, status: 0, message, data: null });
-
-app.post("/api/ai/chat", async (req, res) => {
-  const message = String(req.body?.message || "").trim();
-  if (!message || message.length > 2000) {
-    return apiError(
-      res,
-      "Message is required and must be 2000 characters or fewer."
-    );
-  }
-
-  try {
-    const data = await aiChat(message, req.body?.context || {});
-    return apiSuccess(res, data, "AI response generated.");
-  } catch (error) {
-    console.error("AI chat route error:", error);
-    return apiError(
-      res,
-      "AI assistant is temporarily unavailable. Please try again.",
-      500
-    );
-  }
-});
-
-app.post("/api/ai/suggest-actions", async (req, res) => {
-  try {
-    const data = await aiSuggestActions(req.body?.goal || "", req.body?.context || {});
-    return apiSuccess(res, data, "AI actions generated.");
-  } catch (error) {
-    console.error("AI suggest actions route error:", error);
-    return apiError(res, "Unable to suggest actions right now.", 500);
-  }
-});
-
-app.post("/api/ai/explain-error", async (req, res) => {
-  try {
-    const data = await aiExplainError(
-      req.body?.error || "",
-      req.body?.context || {}
-    );
-    return apiSuccess(res, data, "AI error explanation generated.");
-  } catch (error) {
-    console.error("AI explain error route error:", error);
-    return apiError(res, "Unable to explain this error right now.", 500);
-  }
-});
-
-app.post("/api/ai/summarize", async (req, res) => {
-  try {
-    const data = await aiSummarize(req.body?.text || "", req.body?.mode || "simple");
-    return apiSuccess(res, data, "AI summary generated.");
-  } catch (error) {
-    console.error("AI summarize route error:", error);
-    return apiError(res, "Unable to summarize this content right now.", 500);
   }
 });
 

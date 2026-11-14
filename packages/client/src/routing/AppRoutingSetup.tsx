@@ -89,6 +89,9 @@ import { StaffsListPage } from '@/pages/staff';
 import { PermissionGuard } from '@/auth/PermissionGuard';
 // import { AccountabilitiesPage } from '@/pages/accountabilities/AccountabilitiesPage';
 
+const HelpCentrePage = lazy(() => import('@/pages/help-centre/HelpCentrePage'));
+const HelpCentreManagePage = lazy(() => import('@/pages/help-centre/HelpCentreManagePage'));
+
 const DashboardPage = lazy(() =>
   import('@/pages/dashboards/demo1/light-sidebar/Demo1LightSidebarPage').then((module) => ({
     default: module.Demo1LightSidebarPage
@@ -123,6 +126,11 @@ const AppRoutingSetup = (): ReactElement => {
           <Route path="/requisitions/:id/accountability" element={<PermissionGuard
             required={['can_view_requisitions']}
           ><AccountabilityPage /></PermissionGuard>} />
+
+          <Route path="/help" element={<Suspense fallback={null}><HelpCentrePage /></Suspense>} />
+          <Route path="/settings/help-centre" element={<PermissionGuard
+            required={['can_manage_help_centre']}
+          ><Suspense fallback={null}><HelpCentreManagePage /></Suspense></PermissionGuard>} />
 
           <Route path="/settings/roles" element={<PermissionGuard
             required={['can_manage_staff']}

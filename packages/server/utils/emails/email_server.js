@@ -1,12 +1,20 @@
 import { GraphQLError } from "graphql";
 import nodemailer from "nodemailer";
+import { buildBrandedEmail } from "./brandedEmail.js";
 
+// params: { to, subject, from?, attachments? } plus either
+//   template: { heading, greeting, paragraphs, details, callout, action, note, ... } -> branded NAD layout
+// or the raw fields message (plain text) / html.
 async function sendEmail(params) {
   if (!params) {
     throw new GraphQLError("sendEmail: params object is required");
   }
-  
-  const { to, subject, message, html, attachments, from } = params;
+
+  const { to, subject, from, template } = params;
+  const branded = template ? buildBrandedEmail(template) : null;
+  const message = branded ? branded.text : params.message;
+  const html = branded ? branded.html : params.html;
+  const attachments = [...(branded?.attachments || []), ...(params.attachments || [])];
   
   const smtpUser =  "info@naduganda.org";
   const smtpPass = "ejgvK1CLF(?[";
@@ -28,7 +36,7 @@ async function sendEmail(params) {
       },
     });
 
-    console.log("Sending mail");
+    // console.log("Sending mail");
 
     // Verify credentials/connection before sending to surface auth/network issues clearly.
     await transporter.verify();
@@ -43,7 +51,7 @@ async function sendEmail(params) {
       attachments,
     });
 
-    console.log("Message sent: %s", info.messageId);
+    // console.log("Message sent: %s", info.messageId);
   } catch (error) {
     console.error("Email send failure:", {
       message: error?.message,
@@ -61,5 +69,4 @@ async function sendEmail(params) {
   }
 }
 
-// sendEmail('dakampereza.std@nkumbauniversity.ac.ug', '123456');
 export default sendEmail;

@@ -17,6 +17,10 @@ const FILE_FIELDS = [
   ['receipt', 'receipt_name'],
 ];
 
+// The narrative report is an uploaded document, capped at 2 MB.
+const NARRATIVE_MAX_BYTES = 2 * 1024 * 1024;
+const NARRATIVE_EXTENSIONS = ['.pdf', '.doc', '.docx'];
+
 const sameUser = (a, b) => a != null && b != null && String(a) === String(b);
 
 const parseAttachments = (value) => {
@@ -206,7 +210,7 @@ const accountabilityResolvers = {
 
   Mutation: {
     saveAccountability: async (_parent, { input }, context) => {
-      const { id, requisitionId, reportDate, summary, status, items } = input;
+      const { id, requisitionId, reportDate, summary, narrativeReport, status, items } = input;
 
       const userId = requireUser(context).id;
 
@@ -227,7 +231,7 @@ const accountabilityResolvers = {
       let existing = null;
       if (id) {
         const [[row]] = await db.execute(
-          `SELECT id, requisition_id, reported_by, status FROM accountability_records WHERE id = ? LIMIT 1`,
+          `SELECT id, requisition_id, reported_by, status, narrative_report FROM accountability_records WHERE id = ? LIMIT 1`,
           [id]
         );
         if (!row || String(row.requisition_id) !== String(requisitionId)) {
@@ -268,6 +272,23 @@ const accountabilityResolvers = {
 
       // Anything other than an explicit draft save is a submission for review.
       const submitting = Boolean(status) && status !== 'Draft';
+      // Drafts may be saved without one; a submission may not.
+      const hasNarrative = Boolean(narrativeReport) || Boolean(String(existing?.narrative_report || '').trim());
+      if (submitting && !hasNarrative) {
+        throw new GraphQLError('A narrative report is required before submitting.', {
+          extensions: { code: 'BAD_USER_INPUT' },
+        });
+      }
+
+      if (narrativeReport) {
+        const upload = await narrativeReport;
+        const extension = String(upload?.filename || '').toLowerCase().match(/\.[^.]+$/)?.[0] || '';
+        if (!NARRATIVE_EXTENSIONS.includes(extension)) {
+          throw new GraphQLError('The narrative report must be a PDF or Word document.', {
+            extensions: { code: 'BAD_USER_INPUT' },
+          });
+        }
+      }
       const currentStatus = existing?.status || 'Draft';
       const nextStatus = !submitting
         ? currentStatus
@@ -287,6 +308,15 @@ const accountabilityResolvers = {
       try {
         await connection.beginTransaction();
 
+        // Omitted on edit means "keep the document already on file".
+        const narrativeInfo = narrativeReport
+          ? await saveUpload({
+              file: narrativeReport,
+              subdir: 'accountability_docs',
+              maxSize: NARRATIVE_MAX_BYTES,
+            })
+          : null;
+
         const accountabilityId = await saveData({
           table: 'accountability_records',
           id: id ?? null,
@@ -296,6 +326,7 @@ const accountabilityResolvers = {
             status: nextStatus,
             report_date: reportDate || null,
             summary: summary || null,
+            ...(narrativeInfo ? { narrative_report: narrativeInfo.filename } : {}),
             total_accounted_amount: totalAccountedAmount,
             variance_amount: varianceAmount,
             updated_at: new Date(),
@@ -395,7 +426,7 @@ const accountabilityResolvers = {
       }
 
       const [[current]] = await db.execute(
-        `SELECT requisition_id, reported_by, status FROM accountability_records WHERE id = ? LIMIT 1`,
+        `SELECT requisition_id, reported_by, status, narrative_report FROM accountability_records WHERE id = ? LIMIT 1`,
         [id]
       );
       if (!current) {
@@ -424,6 +455,11 @@ const accountabilityResolvers = {
         if (!sameUser(current.reported_by, userId)) {
           throw new GraphQLError('Only the person who reported this accountability can submit it.', {
             extensions: { code: 'FORBIDDEN' },
+          });
+        }
+        if (!String(current.narrative_report || '').trim()) {
+          throw new GraphQLError('A narrative report is required before submitting.', {
+            extensions: { code: 'BAD_USER_INPUT' },
           });
         }
       }

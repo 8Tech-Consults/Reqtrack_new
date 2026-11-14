@@ -670,7 +670,7 @@ const userResolvers = {
           });
         }
 
-        console.log("Updating user:" )
+        // console.log("Updating user:" )
 
         // Prepare update data
         const updateData = {
@@ -1008,7 +1008,16 @@ const userResolvers = {
         const params = {
           to: email,
           subject: "Password Reset Request",
-          message: `Hello ${user.name},\n\nYou requested a password reset. Please use the following link to reset your password:\n\n${resetUrl.toString()}\n\nThis link expires in 15 minutes. If you did not request this, please ignore this email.\n\nBest regards,\nPWD Observatory Team`,
+          template: {
+            heading: "Reset your password",
+            preheader: "Use this link to choose a new password. It expires in 15 minutes.",
+            greeting: `Hello ${user.name},`,
+            paragraphs: [
+              "We received a request to reset the password for your NAD Requisition Management account. Click the button below to choose a new password.",
+            ],
+            action: { label: "Reset password", url: resetUrl.toString() },
+            note: "This link expires in 15 minutes. If you didn't request a password reset, you can ignore this email and your password will stay the same.",
+          },
         };
         await sendEmail(params);
 

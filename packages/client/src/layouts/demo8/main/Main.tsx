@@ -7,6 +7,7 @@ import { useMenus } from '@/providers';
 import { Footer, Header, Sidebar } from '..';
 import { Download, Plus, RefreshCw } from 'lucide-react';
 import { useDemo8Layout } from '..';
+import { HelpAssistantWidget } from '@/components/help-assistant/HelpAssistantWidget';
 
 const Main = () => {
   const { pathname } = useLocation();
@@ -76,6 +77,8 @@ const Main = () => {
 
         <Footer />
       </div>
+
+      <HelpAssistantWidget />
     </Fragment>
   );
 };

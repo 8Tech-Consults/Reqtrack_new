@@ -35,4 +35,9 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # Finder (MacOS) folder config
 .DS_Store
 
+packages/server/public
 
+# Local data-migration reports (contain user names/emails)
+packages/server/scripts
+
+reqtrack_new_backup.sql
