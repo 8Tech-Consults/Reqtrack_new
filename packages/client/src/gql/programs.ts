@@ -166,6 +166,7 @@ export const UPLOAD_PROGRAM_BUDGET = gql`
       updatedBudgetLines
       unchangedBudgetLines
       errors
+      warnings
     }
   }
 `;
@@ -196,6 +197,7 @@ export type ProgramBudgetUploadResult = {
   updatedBudgetLines?: number | null;
   unchangedBudgetLines?: number | null;
   errors?: string[] | null;
+  warnings?: string[] | null;
 };
 
 export const CREATE_PROGRAM_BUDGET_LINE = gql`

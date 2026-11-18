@@ -39,5 +39,8 @@ packages/server/public
 
 # Local data-migration reports (contain user names/emails)
 packages/server/scripts
+packages/server/public.zip
+packages/server/book1.xlsx
 
 reqtrack_new_backup.sql
+

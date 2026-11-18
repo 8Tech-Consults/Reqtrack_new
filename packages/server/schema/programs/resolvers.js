@@ -51,14 +51,214 @@ const nameKey = (value) => String(value ?? '').trim().toLowerCase();
 
 const sameNumber = (a, b) => Math.abs(Number(a || 0) - Number(b || 0)) < 0.005;
 
+// Reads an uploaded budget workbook in either supported layout:
+//   - the NAD budget workbook (Budget Revision layout, see parseNadBudgetSheet), or
+//   - the older simple template (A=Outcome ... I=Frequency, see parseTemplateSheet).
+// Returns { errors, lines, warnings, fileProgramName }.
 const parseBudgetWorkbook = async (filePath, programType) => {
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.readFile(filePath);
   const sheet = workbook.worksheets[0];
   if (!sheet) {
-    return { errors: ['The uploaded file has no worksheet.'], lines: [] };
+    return { errors: ['The uploaded file has no worksheet.'], lines: [], warnings: [] };
   }
 
+  const nadHeaderRow = findNadHeaderRow(sheet);
+  if (nadHeaderRow) return parseNadBudgetSheet(sheet, nadHeaderRow, programType);
+  return { warnings: [], ...parseTemplateSheet(sheet, programType) };
+};
+
+// ─── NAD budget workbook layout ────────────────────────────────────────────
+// The layout NAD keeps its budgets in (e.g. "BUDGET REVISION II 2025"), and the
+// layout of the downloadable template built by scripts/buildBudgetTemplate.js:
+//   Header rows: F=Cost type, G=Units, H=Unit cost, I=Quantity, J=Frequency,
+//                K=computed budget (ignored - we recompute H*I*J).
+//   Everything above the "Other direct activity costs ..." row is a summary
+//   block (Travels, Investments, ...) whose figures repeat lines further down,
+//   so parsing starts after that row and stops at "GRAND TOTAL". Boundaries are
+//   found by their text, never by row number.
+//   Below the marker:  A only = Outcome, B only = Output, C (not a merged
+//   description block) = Activity, any row with a Cost type in F = budget line.
+const NAD_START_MARKER = /^\s*other direct activity costs/i;
+const NAD_END_MARKER = /grand total/i;
+const NAD_FILLER_TEXT = /^\s*(add lines as needed|description of the activity)/i;
+const NAD_COLUMNS = { costType: 6, units: 7, unitCost: 8, quantity: 9, frequency: 10 };
+
+const findNadHeaderRow = (sheet) => {
+  const scanTo = Math.min(25, Math.max(sheet.actualRowCount || 0, sheet.rowCount || 0));
+  for (let rowNumber = 1; rowNumber <= scanTo; rowNumber += 1) {
+    const row = sheet.getRow(rowNumber);
+    if (
+      /cost\s*type/i.test(cellText(row.getCell(NAD_COLUMNS.costType))) &&
+      /unit\s*cost/i.test(cellText(row.getCell(NAD_COLUMNS.unitCost)))
+    ) {
+      return rowNumber;
+    }
+  }
+  return null;
+};
+
+// Column-C cells covered by a merge spanning several rows (activity description blocks).
+const columnIndex = (letters) =>
+  [...letters].reduce((total, ch) => total * 26 + (ch.charCodeAt(0) - 64), 0);
+
+const verticallyMergedCCells = (sheet) => {
+  const covered = new Set();
+  for (const range of sheet.model?.merges || []) {
+    const match = /^([A-Z]+)(\d+):([A-Z]+)(\d+)$/.exec(range);
+    if (!match) continue;
+    const [, startCol, startRow, endCol, endRow] = match;
+    if (Number(endRow) <= Number(startRow)) continue; // single-row merge
+    if (columnIndex(startCol) > 3 || columnIndex(endCol) < 3) continue; // doesn't cover column C
+    for (let r = Number(startRow); r <= Number(endRow); r += 1) covered.add(r);
+  }
+  return covered;
+};
+
+const parseNadBudgetSheet = (sheet, headerRow, programType) => {
+  const errors = [];
+  const warnings = [];
+  const lastRow = Math.max(sheet.actualRowCount || 0, sheet.rowCount || 0);
+
+  // The program name sits in column A of the title block, above the headers.
+  let fileProgramName = null;
+  for (let r = 1; r < headerRow && !fileProgramName; r += 1) {
+    const text = cellText(sheet.getRow(r).getCell(1)).trim();
+    // Skip titles, notes and labels ("Program name:") - the name is the first plain value.
+    if (text && !/^(nad\b|budget|year|program name|currency)/i.test(text) && !/:\s*$/.test(text)) {
+      fileProgramName = text;
+    }
+  }
+
+  let startRow = null;
+  for (let r = headerRow + 1; r <= lastRow; r += 1) {
+    if (NAD_START_MARKER.test(cellText(sheet.getRow(r).getCell(1)))) {
+      startRow = r + 1;
+      break;
+    }
+  }
+  if (!startRow) {
+    return {
+      errors: [
+        "Couldn't find the \"Other direct activity costs\" row that marks where the activities start. Download the template to see the expected layout.",
+      ],
+      lines: [],
+      warnings,
+      fileProgramName,
+    };
+  }
+
+  const descriptionRows = verticallyMergedCCells(sheet);
+  const rawLines = [];
+  let currentOutcome = null;
+  let currentOutput = null;
+  let currentActivity = null;
+
+  for (let rowNumber = startRow; rowNumber <= lastRow; rowNumber += 1) {
+    const row = sheet.getRow(rowNumber);
+    const a = cellText(row.getCell(1)).trim();
+    const b = cellText(row.getCell(2)).trim();
+    const c = cellText(row.getCell(3)).trim();
+    const costType = cellText(row.getCell(NAD_COLUMNS.costType)).trim();
+
+    if (NAD_END_MARKER.test(a)) break;
+
+    if (costType) {
+      const rowErrors = [];
+      const numberOrZero = (column, label) => {
+        const cell = row.getCell(column);
+        const text = cellText(cell).trim();
+        if (!text) return 0;
+        const value = cellNumber(cell);
+        if (value === null) {
+          rowErrors.push(`${label} must be a number`);
+          return 0;
+        }
+        if (value < 0) rowErrors.push(`${label} can't be negative`);
+        return value;
+      };
+      const unitPrice = numberOrZero(NAD_COLUMNS.unitCost, 'Unit cost');
+      const quantity = numberOrZero(NAD_COLUMNS.quantity, 'Quantity');
+      const frequency = numberOrZero(NAD_COLUMNS.frequency, 'Frequency');
+
+      if (programType === 'Activity') {
+        if (!currentOutcome) rowErrors.push('no Outcome (column A) set above it');
+        if (!currentOutput) rowErrors.push('no Output (column B) set above it');
+      }
+      if (!currentActivity) rowErrors.push('no Activity (column C) set above it');
+
+      if (rowErrors.length) {
+        errors.push(`Row ${rowNumber} ("${costType}"): ${rowErrors.join(', ')}.`);
+        continue;
+      }
+
+      rawLines.push({
+        rowNumber,
+        outcome: programType === 'Admin' ? 'General' : currentOutcome,
+        output: programType === 'Admin' ? 'General' : currentOutput,
+        activity: currentActivity,
+        costType,
+        units: cellText(row.getCell(NAD_COLUMNS.units)).trim(),
+        unitPrice,
+        quantity,
+        frequency,
+      });
+      continue;
+    }
+
+    if (a) {
+      // Outcome row (a section merged across A:C shows the same text in B and C).
+      currentOutcome = a;
+      currentOutput = null;
+      currentActivity = null;
+    } else if (b) {
+      currentOutput = b;
+      currentActivity = null;
+    } else if (c && !descriptionRows.has(rowNumber) && !NAD_FILLER_TEXT.test(c)) {
+      currentActivity = c;
+    }
+  }
+
+  // Name lines by cost type; when a cost type repeats within an activity, add the
+  // Units text so each line has a unique, stable name for re-upload matching.
+  const activityKey = (line) => [line.outcome, line.output, line.activity].map(nameKey).join('|');
+  const costTypeCounts = new Map();
+  for (const line of rawLines) {
+    const key = `${activityKey(line)}|${nameKey(line.costType)}`;
+    costTypeCounts.set(key, (costTypeCounts.get(key) || 0) + 1);
+  }
+
+  const usedNames = new Set();
+  const lines = rawLines.map((line) => {
+    const repeated = costTypeCounts.get(`${activityKey(line)}|${nameKey(line.costType)}`) > 1;
+    let name = repeated && line.units && nameKey(line.units) !== nameKey(line.costType)
+      ? `${line.costType} – ${line.units}`
+      : line.costType;
+    if (usedNames.has(`${activityKey(line)}|${nameKey(name)}`)) {
+      name = `${name} (row ${line.rowNumber})`;
+      warnings.push(
+        `Row ${line.rowNumber}: "${line.costType}" appears more than once under "${line.activity}" with the same Units text, so it was named "${name}". Give each line a different Units description to keep names stable.`
+      );
+    }
+    usedNames.add(`${activityKey(line)}|${nameKey(name)}`);
+    return {
+      outcome: line.outcome,
+      output: line.output,
+      activity: line.activity,
+      // Both columns are VARCHAR(255).
+      name: name.slice(0, 255),
+      units: (line.units || line.costType).slice(0, 255),
+      unitPrice: line.unitPrice,
+      quantity: line.quantity,
+      frequency: line.frequency,
+    };
+  });
+
+  return { errors, lines, warnings, fileProgramName };
+};
+
+// ─── Simple template layout (older template) ───────────────────────────────
+const parseTemplateSheet = (sheet, programType) => {
   const errors = [];
   const lines = [];
   let currentOutcome = null;
@@ -659,7 +859,7 @@ const programsResolvers = {
       }
 
       const [[program]] = await db.execute(
-        `SELECT id, type FROM programs WHERE id = ? AND deleted = 0 LIMIT 1`,
+        `SELECT id, name, type FROM programs WHERE id = ? AND deleted = 0 LIMIT 1`,
         [id]
       );
       if (!program) {
@@ -689,12 +889,20 @@ const programsResolvers = {
         fs.unlink(absolutePath, () => {});
       }
 
+      const warnings = [...(parsed.warnings || [])];
+      if (parsed.fileProgramName && nameKey(parsed.fileProgramName) !== nameKey(program.name)) {
+        warnings.unshift(
+          `This file is labelled "${parsed.fileProgramName}" but you're uploading it to "${program.name}". Check it's the right budget before saving.`
+        );
+      }
+
       if (parsed.errors.length) {
         return {
           success: false,
           message: 'The file has errors and nothing was saved. Fix these and re-upload.',
           createdBudgetLines: 0,
           errors: parsed.errors,
+          warnings,
         };
       }
 
@@ -704,6 +912,7 @@ const programsResolvers = {
           message: 'No budget lines were found in the file.',
           createdBudgetLines: 0,
           errors: [],
+          warnings,
         };
       }
 
@@ -901,6 +1110,7 @@ const programsResolvers = {
           unchangedBudgetLines,
           changes,
           errors: [],
+          warnings,
         };
       } catch (error) {
         await connection.rollback();
@@ -1028,3 +1238,5 @@ const programsResolvers = {
 };
 
 export default programsResolvers;
+// Exported for scripts/tests (scripts/buildBudgetTemplate.js verifies its output with it).
+export { parseBudgetWorkbook, buildBudgetTree };

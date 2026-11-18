@@ -1489,7 +1489,11 @@ export const ProjectsPage = () => {
           <div className="flex-1 space-y-4 overflow-y-auto p-6">
             <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-sm font-semibold text-slate-900">1. Download the template</p>
-              <p className="text-xs text-slate-500">Add the outcomes, outputs, activities, and budget items for this program.</p>
+              <p className="text-xs text-slate-500">
+                The template follows NAD's budget workbook layout. Add the outcomes, outputs, activities and budget lines
+                below the "Other direct activity costs" row; totals are calculated for you. You can also upload NAD's own
+                budget workbook directly.
+              </p>
               <a href={`${URL_2}/templates/budget-upload-template.xlsx`} className="btn btn-sm btn-light w-fit" download>
                 Download template
               </a>
@@ -1545,6 +1549,17 @@ export const ProjectsPage = () => {
                     Items are matched by name. Nothing is deleted - items not in the file stay as they are.
                   </p>
                 </div>
+
+                {!!budgetPreview.warnings?.length && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                    <p className="text-xs font-semibold text-amber-800">Check before saving:</p>
+                    <ul className="mt-1 list-inside list-disc space-y-1">
+                      {budgetPreview.warnings.map((message, index) => (
+                        <li key={`${index}-${message}`} className="text-xs text-amber-700">{message}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                   {[

@@ -92,6 +92,7 @@ const programsTypeDefs = `#graphql
     updatedBudgetLines: Int
     unchangedBudgetLines: Int
     errors: [String!]
+    warnings: [String!]
   }
 
   type ProgramBudgetLineMutationResponse {
